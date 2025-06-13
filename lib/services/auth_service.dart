@@ -29,31 +29,54 @@ class AuthService extends ChangeNotifier {
     try {
       _updateState(_state.copyWith(status: AuthStatus.loading));
 
+      // Format phone number properly for Algeria
+      String formattedPhone = phoneNumber;
+      if (!phoneNumber.startsWith('+')) {
+        // Remove leading zero if present and add country code
+        if (phoneNumber.startsWith('0')) {
+          formattedPhone = '+213${phoneNumber.substring(1)}';
+        } else {
+          formattedPhone = '+213$phoneNumber';
+        }
+      }
+
+      print('Attempting to send OTP to: $formattedPhone'); // Debug log
+
       await _auth.verifyPhoneNumber(
-        phoneNumber: phoneNumber,
+        phoneNumber: formattedPhone,
         verificationCompleted: (PhoneAuthCredential credential) async {
-          await _auth.signInWithCredential(credential);
-          _updateState(_state.copyWith(status: AuthStatus.authenticated));
+          try {
+            await _auth.signInWithCredential(credential);
+            _updateState(_state.copyWith(status: AuthStatus.authenticated));
+          } catch (e) {
+            _updateState(_state.copyWith(
+              status: AuthStatus.error,
+              error: 'Erreur lors de la connexion automatique: ${e.toString()}',
+            ));
+          }
         },
         verificationFailed: (FirebaseAuthException e) {
+          print('Verification failed: ${e.code} - ${e.message}'); // Debug log
           _updateState(_state.copyWith(
             status: AuthStatus.error,
             error: _getErrorMessage(e),
           ));
         },
         codeSent: (String verificationId, int? resendToken) {
+          print('Code sent successfully. Verification ID: $verificationId'); // Debug log
           _updateState(_state.copyWith(
             status: AuthStatus.codeSent,
             verificationId: verificationId,
-            phoneNumber: phoneNumber,
+            phoneNumber: formattedPhone,
           ));
         },
         codeAutoRetrievalTimeout: (String verificationId) {
-          // Handle timeout
+          print('Auto retrieval timeout for: $verificationId'); // Debug log
         },
         timeout: const Duration(seconds: 60),
       );
     } catch (e) {
+      print('Request OTP error: ${e.toString()}'); // Debug log
       _updateState(_state.copyWith(
         status: AuthStatus.error,
         error: 'Une erreur est survenue: ${e.toString()}',
@@ -119,8 +142,21 @@ class AuthService extends ChangeNotifier {
         return 'Code de vérification invalide';
       case 'session-expired':
         return 'Session expirée. Demandez un nouveau code';
+      case 'quota-exceeded':
+        return 'Quota SMS dépassé. Réessayez plus tard';
+      case 'app-not-authorized':
+        return 'Application non autorisée pour ce pays';
+      case 'missing-phone-number':
+        return 'Numéro de téléphone manquant';
+      case 'invalid-app-credential':
+        return 'Identifiants d\'application invalides';
       default:
-        return 'Erreur d\'authentification: ${e.message}';
+        // Check if it's the region error
+        if (e.message?.contains('region') == true || 
+            e.message?.contains('SMS unable to be sent') == true) {
+          return 'Ce pays n\'est pas encore supporté. Contactez le support.';
+        }
+        return 'Erreur d\'authentification: ${e.message ?? e.code}';
     }
   }
 }

@@ -52,10 +52,10 @@ class _LoginScreenState extends State<LoginScreen> {
   void _validateAndProceed() {
     String phone = _phoneController.text.trim();
 
-    // Validation: 10 digits starting with 06, 05, or 07
-    final validPrefixes = ['06', '05', '07'];
-    final isValid =
-        RegExp(r'^\d{10}$').hasMatch(phone) &&
+    // Updated validation for Algerian numbers
+    // Algerian mobile numbers: 05, 06, 07 (9 digits after country code)
+    final validPrefixes = ['05', '06', '07'];
+    final isValid = RegExp(r'^\d{9}$').hasMatch(phone) &&
         validPrefixes.contains(phone.substring(0, 2));
 
     if (!_acceptedTerms) {
@@ -64,7 +64,7 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     if (!isValid) {
-      setState(() => _error = 'Numéro invalide. Format requis: 06XXXXXXXX');
+      setState(() => _error = 'Numéro invalide. Format requis: 05XXXXXXX, 06XXXXXXX ou 07XXXXXXX');
     } else {
       setState(() => _error = null);
       _showChannelChoiceMenu(context);
@@ -120,7 +120,8 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _requestOTP() {
-    final phoneNumber = '+212${_phoneController.text.trim()}';
+    // Format the phone number for Algeria (+213)
+    final phoneNumber = _phoneController.text.trim();
     context.read<AuthService>().requestOTP(phoneNumber);
   }
 
@@ -154,6 +155,23 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   child: Row(
                     children: [
+                      // Country code prefix
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: const Text(
+                          '+213',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.grey,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        width: 1,
+                        height: 30,
+                        color: Colors.grey.withOpacity(0.5),
+                      ),
                       Expanded(
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -163,7 +181,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             enabled: !isLoading,
                             decoration: const InputDecoration(
                               border: InputBorder.none,
-                              hintText: 'Num téléphone: 06XXXXXXXX',
+                              hintText: '05XXXXXXX',
                             ),
                           ),
                         ),
