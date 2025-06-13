@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "49317886540",
+    "project_id": "rakeb-2753f",
+    "storage_bucket": "rakeb-2753f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:49317886540:android:76aa3b5cdc515e480212e9",
+        "android_client_info": {
+          "package_name": "com.example.flutter_application_1"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCebicGg03rrU-47F77be_xtrXWHp3WOG0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:49317886540:android:24ef8860d33ad7810212e9",
+        "android_client_info": {
+          "package_name": "com.rakeb.mototaxi"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCebicGg03rrU-47F77be_xtrXWHp3WOG0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
