@@ -1,6 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Internet permission for Firebase -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Phone permission for SMS verification -->
+    <uses-permission android:name="android.permission.RECEIVE_SMS"/>
+    <uses-permission android:name="android.permission.READ_SMS"/>
+    
     <application
-        android:label="flutter_application_1"
+        android:label="Rakib"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
