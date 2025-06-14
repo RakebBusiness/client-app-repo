@@ -133,133 +133,137 @@ class _LoginScreenState extends State<LoginScreen> {
         builder: (context, authService, child) {
           final isLoading = authService.state.status == AuthStatus.loading;
           
-          return Column(
-            children: [
-              const AppHeader(title: 'Rakib'),
-              const SizedBox(height: 30),
-              const Text('Hello nice to meet you !'),
-              const SizedBox(height: 10),
-              const Text(
-                'Get moving with Rakeb',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 30),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32),
-                child: Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                      color: _error != null ? Colors.red : Colors.grey,
+          return SingleChildScrollView(
+            child: Column(
+              children: [
+                const AppHeader(title: 'Rakib'),
+                const SizedBox(height: 30),
+                const Text('Hello nice to meet you !'),
+                const SizedBox(height: 10),
+                const Text(
+                  'Get moving with Rakeb',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 30),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: _error != null ? Colors.red : Colors.grey,
+                      ),
+                      borderRadius: BorderRadius.circular(25),
                     ),
-                    borderRadius: BorderRadius.circular(25),
-                  ),
-                  child: Row(
-                    children: [
-                      // Country code prefix
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: const Text(
-                          '+213',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.grey,
-                          ),
-                        ),
-                      ),
-                      Container(
-                        width: 1,
-                        height: 30,
-                        color: Colors.grey.withOpacity(0.5),
-                      ),
-                      Expanded(
-                        child: Padding(
+                    child: Row(
+                      children: [
+                        // Country code prefix
+                        Container(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: TextField(
-                            controller: _phoneController,
-                            keyboardType: TextInputType.phone,
-                            enabled: !isLoading,
-                            decoration: const InputDecoration(
-                              border: InputBorder.none,
-                              hintText: '05XXXXXXX',
+                          child: const Text(
+                            '+213',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.grey,
                             ),
                           ),
                         ),
-                      ),
-                      GestureDetector(
-                        onTap: isLoading ? null : _validateAndProceed,
-                        child: Container(
-                          height: 50,
-                          width: 50,
-                          margin: const EdgeInsets.only(right: 4),
-                          decoration: BoxDecoration(
-                            color: isLoading 
-                                ? Colors.grey 
-                                : const Color(0xFF32C156),
-                            borderRadius: BorderRadius.circular(25),
-                          ),
-                          child: isLoading
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(
-                                  Icons.arrow_forward,
-                                  color: Colors.white,
-                                ),
+                        Container(
+                          width: 1,
+                          height: 30,
+                          color: Colors.grey.withOpacity(0.5),
                         ),
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: TextField(
+                              controller: _phoneController,
+                              keyboardType: TextInputType.phone,
+                              enabled: !isLoading,
+                              decoration: const InputDecoration(
+                                border: InputBorder.none,
+                                hintText: '05XXXXXXX',
+                              ),
+                            ),
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: isLoading ? null : _validateAndProceed,
+                          child: Container(
+                            height: 50,
+                            width: 50,
+                            margin: const EdgeInsets.only(right: 4),
+                            decoration: BoxDecoration(
+                              color: isLoading 
+                                  ? Colors.grey 
+                                  : const Color(0xFF32C156),
+                              borderRadius: BorderRadius.circular(25),
+                            ),
+                            child: isLoading
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(
+                                    Icons.arrow_forward,
+                                    color: Colors.white,
+                                  ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (_error != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: Text(_error!, style: const TextStyle(color: Colors.red)),
+                  ),
+                const SizedBox(height: 20),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                  child: Row(
+                    children: [
+                      Checkbox(
+                        value: _acceptedTerms,
+                        onChanged: isLoading 
+                            ? null 
+                            : (val) => setState(() => _acceptedTerms = val!),
+                        activeColor: Colors.black,
+                        checkColor: Colors.white,
+                        shape: const CircleBorder(),
+                      ),
+                      const Expanded(
+                        child: Text("Accepter les termes et conditions"),
                       ),
                     ],
                   ),
                 ),
-              ),
-              if (_error != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8.0),
-                  child: Text(_error!, style: const TextStyle(color: Colors.red)),
+                const SizedBox(height: 20),
+                TextButton(
+                  onPressed: isLoading 
+                      ? null 
+                      : () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const SignupScreen(),
+                            ),
+                          );
+                        },
+                  child: const Text(
+                    'Pas de compte ? S\'inscrire',
+                    style: TextStyle(color: Color(0xFF32C156)),
+                  ),
                 ),
-              const SizedBox(height: 20),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32.0),
-                child: Row(
-                  children: [
-                    Checkbox(
-                      value: _acceptedTerms,
-                      onChanged: isLoading 
-                          ? null 
-                          : (val) => setState(() => _acceptedTerms = val!),
-                      activeColor: Colors.black,
-                      checkColor: Colors.white,
-                      shape: const CircleBorder(),
-                    ),
-                    const Expanded(
-                      child: Text("Accepter les termes et conditions"),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-              TextButton(
-                onPressed: isLoading 
-                    ? null 
-                    : () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const SignupScreen(),
-                          ),
-                        );
-                      },
-                child: const Text(
-                  'Pas de compte ? S\'inscrire',
-                  style: TextStyle(color: Color(0xFF32C156)),
-                ),
-              ),
-            ],
+                // Add some space for reCAPTCHA container on web
+                const SizedBox(height: 100),
+              ],
+            ),
           );
         },
       ),

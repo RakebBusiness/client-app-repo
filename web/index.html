@@ -31,8 +31,16 @@
 
   <title>flutter_application_1</title>
   <link rel="manifest" href="manifest.json">
+
+  <!-- Firebase App (the core Firebase SDK) is always required and must be listed first -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+  <!-- Firebase Auth -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 </head>
 <body>
+  <!-- reCAPTCHA container -->
+  <div id="recaptcha-container"></div>
+  
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>
