@@ -67,7 +67,7 @@ class AuthService extends ChangeNotifier {
       // Ensure proper spacing for international format
       if (formattedPhone.startsWith('+213') && !formattedPhone.contains(' ')) {
         // Add space after country code if missing
-        formattedPhone = formattedPhone.replace('+213', '+213 ');
+        formattedPhone = formattedPhone.replaceAll('+213', '+213 ');
       }
 
       print('Attempting to send OTP to: $formattedPhone');

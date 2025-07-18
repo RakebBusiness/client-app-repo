@@ -180,9 +180,11 @@ class _LoginScreenState extends State<LoginScreen> {
                               controller: _phoneController,
                               keyboardType: TextInputType.phone,
                               enabled: !isLoading,
+                              maxLength: 10,
                               decoration: const InputDecoration(
                                 border: InputBorder.none,
-                                hintText: '05XXXXXXX',
+                                hintText: '0512345678',
+                                counterText: '',
                               ),
                             ),
                           ),
