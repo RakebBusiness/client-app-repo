@@ -35,12 +35,12 @@ class _SignupScreenState extends State<SignupScreen> {
   void _authStateListener() {
     final authState = context.read<AuthService>().state;
     
-    if (authState.status == AuthStatus.codeSent) {
+    if (authState.status == AppAuthStatus.codeSent) {
       Navigator.push(
         context,
         MaterialPageRoute(builder: (context) => const OtpScreen()),
       );
-    } else if (authState.status == AuthStatus.error) {
+    } else if (authState.status == AppAuthStatus.error) {
       setState(() {
         _error = authState.error;
       });
@@ -79,7 +79,7 @@ class _SignupScreenState extends State<SignupScreen> {
       backgroundColor: Colors.white,
       body: Consumer<AuthService>(
         builder: (context, authService, child) {
-          final isLoading = authService.state.status == AuthStatus.loading;
+          final isLoading = authService.state.status == AppAuthStatus.loading;
           
           return Column(
             children: [

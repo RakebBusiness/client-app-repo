@@ -13,7 +13,7 @@ class AuthWrapper extends StatelessWidget {
     return Consumer<AuthService>(
       builder: (context, authService, child) {
         // Show loading while checking auth state
-        if (authService.state.status == AuthStatus.initial) {
+        if (authService.state.status == AppAuthStatus.initial) {
           return const Scaffold(
             body: Center(
               child: CircularProgressIndicator(

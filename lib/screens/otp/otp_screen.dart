@@ -40,7 +40,7 @@ class _OtpScreenState extends State<OtpScreen> {
   void _authStateListener() {
     final authState = context.read<AuthService>().state;
     
-    if (authState.status == AuthStatus.verified) {
+    if (authState.status == AppAuthStatus.verified) {
       // Check if user needs to complete profile
       final user = context.read<AuthService>().currentUser;
       if (user?.displayName == null || user!.displayName!.isEmpty) {
@@ -54,7 +54,7 @@ class _OtpScreenState extends State<OtpScreen> {
           MaterialPageRoute(builder: (context) => const HomeScreen()),
         );
       }
-    } else if (authState.status == AuthStatus.error) {
+    } else if (authState.status == AppAuthStatus.error) {
       setState(() {
         _error = authState.error;
       });
@@ -104,7 +104,7 @@ class _OtpScreenState extends State<OtpScreen> {
       backgroundColor: Colors.white,
       body: Consumer<AuthService>(
         builder: (context, authService, child) {
-          final isLoading = authService.state.status == AuthStatus.loading;
+          final isLoading = authService.state.status == AppAuthStatus.loading;
           final phoneNumber = authService.state.phoneNumber ?? '';
           
           return Column(

@@ -1,4 +1,4 @@
-enum AuthStatus {
+enum AppAuthStatus {
   initial,
   loading,
   codeSent,
@@ -8,29 +8,29 @@ enum AuthStatus {
   unauthenticated
 }
 
-class AuthState {
-  final AuthStatus status;
+class AppAuthState {
+  final AppAuthStatus status;
   final String? error;
   final String? verificationId;
   final String? phoneNumber;
   final String? userId;
 
-  const AuthState({
-    this.status = AuthStatus.initial,
+  const AppAuthState({
+    this.status = AppAuthStatus.initial,
     this.error,
     this.verificationId,
     this.phoneNumber,
     this.userId,
   });
 
-  AuthState copyWith({
-    AuthStatus? status,
+  AppAuthState copyWith({
+    AppAuthStatus? status,
     String? error,
     String? verificationId,
     String? phoneNumber,
     String? userId,
   }) {
-    return AuthState(
+    return AppAuthState(
       status: status ?? this.status,
       error: error,
       verificationId: verificationId ?? this.verificationId,

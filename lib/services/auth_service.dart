@@ -5,9 +5,9 @@ import '../models/auth_state.dart';
 
 class AuthService extends ChangeNotifier {
   final SupabaseClient _supabase = Supabase.instance.client;
-  AuthState _state = const AuthState();
+  AppAuthState _state = const AppAuthState();
 
-  AuthState get state => _state;
+  AppAuthState get state => _state;
   User? get currentUser => _supabase.auth.currentUser;
   bool get isAuthenticated => currentUser != null;
 
@@ -18,11 +18,11 @@ class AuthService extends ChangeNotifier {
       
       if (event == AuthChangeEvent.signedIn && session != null) {
         _updateState(_state.copyWith(
-          status: AuthStatus.authenticated,
+          status: AppAuthStatus.authenticated,
           userId: session.user.id,
         ));
       } else if (event == AuthChangeEvent.signedOut) {
-        _updateState(_state.copyWith(status: AuthStatus.unauthenticated));
+        _updateState(_state.copyWith(status: AppAuthStatus.unauthenticated));
       }
     });
     
@@ -34,22 +34,22 @@ class AuthService extends ChangeNotifier {
     final session = _supabase.auth.currentSession;
     if (session != null) {
       _updateState(_state.copyWith(
-        status: AuthStatus.authenticated,
+        status: AppAuthStatus.authenticated,
         userId: session.user.id,
       ));
     } else {
-      _updateState(_state.copyWith(status: AuthStatus.unauthenticated));
+      _updateState(_state.copyWith(status: AppAuthStatus.unauthenticated));
     }
   }
 
-  void _updateState(AuthState newState) {
+  void _updateState(AppAuthState newState) {
     _state = newState;
     notifyListeners();
   }
 
   Future<void> requestOTP(String phoneNumber) async {
     try {
-      _updateState(_state.copyWith(status: AuthStatus.loading));
+      _updateState(_state.copyWith(status: AppAuthStatus.loading));
 
       // Format phone number properly for Algeria
       String formattedPhone = phoneNumber;
@@ -69,7 +69,7 @@ class AuthService extends ChangeNotifier {
       );
 
       _updateState(_state.copyWith(
-        status: AuthStatus.codeSent,
+        status: AppAuthStatus.codeSent,
         phoneNumber: formattedPhone,
       ));
 
@@ -77,7 +77,7 @@ class AuthService extends ChangeNotifier {
     } catch (e) {
       print('Request OTP error: ${e.toString()}');
       _updateState(_state.copyWith(
-        status: AuthStatus.error,
+        status: AppAuthStatus.error,
         error: _getErrorMessage(e),
       ));
     }
@@ -85,11 +85,11 @@ class AuthService extends ChangeNotifier {
 
   Future<void> verifyOTP(String smsCode) async {
     try {
-      _updateState(_state.copyWith(status: AuthStatus.loading));
+      _updateState(_state.copyWith(status: AppAuthStatus.loading));
 
       if (_state.phoneNumber == null) {
         _updateState(_state.copyWith(
-          status: AuthStatus.error,
+          status: AppAuthStatus.error,
           error: 'Numéro de téléphone manquant',
         ));
         return;
@@ -103,19 +103,19 @@ class AuthService extends ChangeNotifier {
 
       if (response.user != null) {
         _updateState(_state.copyWith(
-          status: AuthStatus.verified,
+          status: AppAuthStatus.verified,
           userId: response.user!.id,
         ));
       } else {
         _updateState(_state.copyWith(
-          status: AuthStatus.error,
+          status: AppAuthStatus.error,
           error: 'Échec de la vérification',
         ));
       }
     } catch (e) {
       print('Verify OTP error: ${e.toString()}');
       _updateState(_state.copyWith(
-        status: AuthStatus.error,
+        status: AppAuthStatus.error,
         error: _getErrorMessage(e),
       ));
     }
@@ -137,10 +137,10 @@ class AuthService extends ChangeNotifier {
   Future<void> signOut() async {
     try {
       await _supabase.auth.signOut();
-      _updateState(const AuthState(status: AuthStatus.unauthenticated));
+      _updateState(const AppAuthState(status: AppAuthStatus.unauthenticated));
     } catch (e) {
       _updateState(_state.copyWith(
-        status: AuthStatus.error,
+        status: AppAuthStatus.error,
         error: 'Erreur de déconnexion: ${e.toString()}',
       ));
     }
