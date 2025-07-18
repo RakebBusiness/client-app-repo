@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/auth_service.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -8,7 +8,7 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
+    final user = Supabase.instance.client.auth.currentUser;
     
     return Scaffold(
       backgroundColor: Colors.white,
@@ -59,7 +59,7 @@ class HomeScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    user?.displayName ?? 'Utilisateur',
+                    user?.userMetadata?['display_name'] ?? 'Utilisateur',
                     style: const TextStyle(
                       fontSize: 18,
                       color: Colors.black87,
@@ -67,7 +67,7 @@ class HomeScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    user?.phoneNumber ?? '',
+                    user?.phone ?? '',
                     style: const TextStyle(
                       fontSize: 14,
                       color: Colors.grey,
@@ -113,7 +113,7 @@ class HomeScreen extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          'Votre numéro ${user?.phoneNumber} a été vérifié avec succès',
+                          'Votre numéro ${user?.phone} a été vérifié avec succès',
                           style: const TextStyle(
                             fontSize: 12,
                             color: Colors.black54,
@@ -135,15 +135,15 @@ class HomeScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            _buildInfoCard('ID Utilisateur', user?.uid ?? 'N/A'),
+            _buildInfoCard('ID Utilisateur', user?.id ?? 'N/A'),
             const SizedBox(height: 12),
-            _buildInfoCard('Téléphone', user?.phoneNumber ?? 'N/A'),
+            _buildInfoCard('Téléphone', user?.phone ?? 'N/A'),
             const SizedBox(height: 12),
-            _buildInfoCard('Nom', user?.displayName ?? 'N/A'),
+            _buildInfoCard('Nom', user?.userMetadata?['display_name'] ?? 'N/A'),
             const SizedBox(height: 12),
             _buildInfoCard(
               'Dernière connexion', 
-              user?.metadata.lastSignInTime?.toString().split('.')[0] ?? 'N/A'
+              user?.lastSignInAt?.toString().split('.')[0] ?? 'N/A'
             ),
           ],
         ),

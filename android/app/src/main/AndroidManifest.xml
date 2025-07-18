@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Internet permission for Firebase -->
+    <!-- Internet permission for Supabase -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <!-- Phone permission for SMS verification -->
     <uses-permission android:name="android.permission.RECEIVE_SMS"/>
