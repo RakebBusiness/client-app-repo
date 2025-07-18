@@ -51,15 +51,23 @@ class AuthService extends ChangeNotifier {
     try {
       _updateState(_state.copyWith(status: AppAuthStatus.loading));
 
-      // Format phone number properly for Algeria
+      // Format phone number properly for Algeria (+213)
       String formattedPhone = phoneNumber;
       if (!phoneNumber.startsWith('+')) {
-        // Remove leading zero if present and add country code
+        // For Algerian numbers: 05/06/07 XXXXXXX -> +213 5/6/7 XX XX XX XX
         if (phoneNumber.startsWith('0')) {
-          formattedPhone = '+213${phoneNumber.substring(1)}';
+          // Remove the leading 0 and add +213
+          formattedPhone = '+213 ${phoneNumber.substring(1)}';
         } else {
-          formattedPhone = '+213$phoneNumber';
+          // Add +213 directly
+          formattedPhone = '+213 $phoneNumber';
         }
+      }
+
+      // Ensure proper spacing for international format
+      if (formattedPhone.startsWith('+213') && !formattedPhone.contains(' ')) {
+        // Add space after country code if missing
+        formattedPhone = formattedPhone.replace('+213', '+213 ');
       }
 
       print('Attempting to send OTP to: $formattedPhone');

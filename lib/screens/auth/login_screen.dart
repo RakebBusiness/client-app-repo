@@ -52,10 +52,10 @@ class _LoginScreenState extends State<LoginScreen> {
   void _validateAndProceed() {
     String phone = _phoneController.text.trim();
 
-    // Updated validation for Algerian numbers
-    // Algerian mobile numbers: 05, 06, 07 (9 digits after country code)
+    // Validation for Algerian mobile numbers
+    // Format: 05/06/07 followed by 8 digits (total 10 digits)
     final validPrefixes = ['05', '06', '07'];
-    final isValid = RegExp(r'^\d{9}$').hasMatch(phone) &&
+    final isValid = RegExp(r'^\d{10}$').hasMatch(phone) &&
         validPrefixes.contains(phone.substring(0, 2));
 
     if (!_acceptedTerms) {
@@ -64,7 +64,7 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     if (!isValid) {
-      setState(() => _error = 'Numéro invalide. Format requis: 05XXXXXXX, 06XXXXXXX ou 07XXXXXXX');
+      setState(() => _error = 'Numéro invalide. Format requis: 05XXXXXXXX, 06XXXXXXXX ou 07XXXXXXXX (10 chiffres)');
     } else {
       setState(() => _error = null);
       _showChannelChoiceMenu(context);
