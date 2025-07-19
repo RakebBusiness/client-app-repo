@@ -6,6 +6,7 @@ import 'package:geolocator/geolocator.dart';
 import '../profile/profile_screen.dart';
 import '../trips/trips_screen.dart';
 import '../promotions/promotions_screen.dart';
+import '../booking/ride_booking_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -460,9 +461,13 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     child: ElevatedButton(
                       onPressed: () {
-                        // TODO: Implement ride booking
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Book a ride feature coming soon!')),
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => RideBookingScreen(
+                              currentLocation: _userLocation,
+                            ),
+                          ),
                         );
                       },
                       style: ElevatedButton.styleFrom(
