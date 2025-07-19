@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 import 'dart:async';
 import '../profile/profile_screen.dart';
 import '../trips/trips_screen.dart';
@@ -27,11 +28,187 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _locationLoaded = false;
   bool _isLoadingLocation = false;
   Set<Marker> _markers = {};
+  
+  // Location selection mode
+  bool _isLocationSelectionMode = false;
+  String _selectionType = ''; // 'pickup' or 'destination'
+  LatLng? _selectedPickupLocation;
+  LatLng? _selectedDestinationLocation;
+  String _selectedPickupAddress = '';
+  String _selectedDestinationAddress = '';
 
   @override
   void initState() {
     super.initState();
     _getCurrentLocation();
+    
+    // Listen for location selection requests
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkForLocationSelectionRequest();
+    });
+  }
+
+  void _checkForLocationSelectionRequest() {
+    // Check if we're returning from booking screen for location selection
+    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    if (args != null && args['selectLocation'] == true) {
+      setState(() {
+        _isLocationSelectionMode = true;
+        _selectionType = args['selectionType'] ?? 'pickup';
+        _selectedPickupLocation = args['pickupLocation'];
+        _selectedDestinationLocation = args['destinationLocation'];
+        _selectedPickupAddress = args['pickupAddress'] ?? '';
+        _selectedDestinationAddress = args['destinationAddress'] ?? '';
+      });
+      _updateMarkersForSelection();
+      _showLocationSelectionInstructions();
+    }
+  }
+
+  void _updateMarkersForSelection() {
+    Set<Marker> markers = {};
+    
+    // Add user location marker
+    markers.add(
+      Marker(
+        markerId: const MarkerId('user_location'),
+        position: _userLocation,
+        infoWindow: const InfoWindow(title: 'Your Location'),
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
+      ),
+    );
+    
+    // Add pickup marker if exists
+    if (_selectedPickupLocation != null) {
+      markers.add(
+        Marker(
+          markerId: const MarkerId('pickup'),
+          position: _selectedPickupLocation!,
+          infoWindow: InfoWindow(title: 'Pickup Location', snippet: _selectedPickupAddress),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+        ),
+      );
+    }
+    
+    // Add destination marker if exists
+    if (_selectedDestinationLocation != null) {
+      markers.add(
+        Marker(
+          markerId: const MarkerId('destination'),
+          position: _selectedDestinationLocation!,
+          infoWindow: InfoWindow(title: 'Destination', snippet: _selectedDestinationAddress),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+        ),
+      );
+    }
+    
+    setState(() {
+      _markers = markers;
+    });
+  }
+
+  void _showLocationSelectionInstructions() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          _selectionType == 'pickup' 
+            ? 'Tap on the map to select pickup location'
+            : 'Tap on the map to select destination',
+        ),
+        backgroundColor: const Color(0xFF32C156),
+        duration: const Duration(seconds: 5),
+        action: SnackBarAction(
+          label: 'Cancel',
+          textColor: Colors.white,
+          onPressed: _cancelLocationSelection,
+        ),
+      ),
+    );
+  }
+
+  void _cancelLocationSelection() {
+    setState(() {
+      _isLocationSelectionMode = false;
+      _selectionType = '';
+    });
+    _updateMarkers();
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+  }
+
+  Future<void> _onMapTap(LatLng position) async {
+    if (!_isLocationSelectionMode) return;
+
+    try {
+      // Get address from coordinates
+      List<Placemark> placemarks = await placemarkFromCoordinates(
+        position.latitude,
+        position.longitude,
+      );
+      
+      String address = 'Selected Location';
+      if (placemarks.isNotEmpty) {
+        final placemark = placemarks.first;
+        address = '${placemark.street ?? ''}, ${placemark.locality ?? ''}'.trim();
+        if (address == ', ') {
+          address = '${placemark.name ?? 'Selected Location'}';
+        }
+      }
+
+      setState(() {
+        if (_selectionType == 'pickup') {
+          _selectedPickupLocation = position;
+          _selectedPickupAddress = address;
+        } else {
+          _selectedDestinationLocation = position;
+          _selectedDestinationAddress = address;
+        }
+      });
+      
+      _updateMarkersForSelection();
+      
+      // Show confirmation and navigate back
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _selectionType == 'pickup' 
+              ? 'Pickup location selected!'
+              : 'Destination selected!',
+          ),
+          backgroundColor: const Color(0xFF32C156),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      
+      // Wait a moment then navigate back to booking
+      await Future.delayed(const Duration(milliseconds: 1500));
+      _returnToBooking();
+      
+    } catch (e) {
+      print('Error getting address: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to get address for selected location'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  void _returnToBooking() {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => RideBookingScreen(
+          currentLocation: _userLocation,
+          selectedPickupLocation: _selectedPickupLocation,
+          selectedDestinationLocation: _selectedDestinationLocation,
+          selectedPickupAddress: _selectedPickupAddress,
+          selectedDestinationAddress: _selectedDestinationAddress,
+        ),
+      ),
+    );
+  }
   }
 
   Future<void> _getCurrentLocation() async {
@@ -81,15 +258,9 @@ class _HomeScreenState extends State<HomeScreen> {
         _userLocation = LatLng(position.latitude, position.longitude);
         _locationLoaded = true;
         _isLoadingLocation = false;
-        _markers = {
-          Marker(
-            markerId: const MarkerId('user_location'),
-            position: _userLocation,
-            infoWindow: const InfoWindow(title: 'Your Location'),
-            icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
-          ),
-        };
       });
+
+      _updateMarkers();
 
       // Move map to user location
       final GoogleMapController controller = await _controller.future;
@@ -104,6 +275,23 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _updateMarkers() {
+    if (_isLocationSelectionMode) {
+      _updateMarkersForSelection();
+      return;
+    }
+    
+    setState(() {
+      _markers = {
+        Marker(
+          markerId: const MarkerId('user_location'),
+          position: _userLocation,
+          infoWindow: const InfoWindow(title: 'Your Location'),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+        ),
+      };
+    });
+  }
   void _showLocationDialog(String message) {
     showDialog(
       context: context,
@@ -205,7 +393,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       body: Stack(
         children: [
-          // OpenStreetMap with Flutter Map
+          // Google Maps
           GoogleMap(
             mapType: MapType.normal,
             initialCameraPosition: _kAlgiers,
@@ -221,9 +409,7 @@ class _HomeScreenState extends State<HomeScreen> {
             trafficEnabled: false,
             buildingsEnabled: true,
             indoorViewEnabled: true,
-            onTap: (LatLng position) {
-              // Handle map tap if needed
-            },
+            onTap: _onMapTap,
           ),
           
           // Top overlay with menu button
@@ -243,8 +429,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
               child: IconButton(
-                icon: const Icon(Icons.more_vert, color: Color(0xFF32C156)),
-                onPressed: _showNavigationMenu,
+                icon: Icon(
+                  _isLocationSelectionMode ? Icons.close : Icons.more_vert, 
+                  color: Color(0xFF32C156)
+                ),
+                onPressed: _isLocationSelectionMode ? _cancelLocationSelection : _showNavigationMenu,
                 iconSize: 24,
               ),
             ),
@@ -269,9 +458,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ],
                 ),
-                child: const Text(
-                  'Rakeb',
-                  style: TextStyle(
+                child: Text(
+                  _isLocationSelectionMode 
+                    ? (_selectionType == 'pickup' ? 'Select Pickup' : 'Select Destination')
+                    : 'Rakeb',
+                  style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
                     color: Color(0xFF32C156),
@@ -282,7 +473,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
 
           // Zoom controls
-          Positioned(
+          if (!_isLocationSelectionMode) Positioned(
             right: 16,
             top: MediaQuery.of(context).padding.top + 80,
             child: Column(
@@ -333,7 +524,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
 
           // My location button
-          Positioned(
+          if (!_isLocationSelectionMode) Positioned(
             right: 16,
             bottom: 120,
             child: Container(
@@ -359,7 +550,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
 
           // Bottom action buttons
-          Positioned(
+          if (!_isLocationSelectionMode) Positioned(
             bottom: 30,
             left: 20,
             right: 20,
@@ -404,6 +595,100 @@ class _HomeScreenState extends State<HomeScreen> {
                           SizedBox(width: 8),
                           Text(
                             'Book a Ride',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          // Location selection confirmation button
+          if (_isLocationSelectionMode) Positioned(
+            bottom: 30,
+            left: 20,
+            right: 20,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      borderRadius: BorderRadius.circular(28),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.2),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: ElevatedButton(
+                      onPressed: _cancelLocationSelection,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.transparent,
+                        shadowColor: Colors.transparent,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(28),
+                        ),
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.close, color: Colors.white),
+                          SizedBox(width: 8),
+                          Text(
+                            'Cancel Selection',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Container(
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF32C156),
+                      borderRadius: BorderRadius.circular(28),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.2),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: ElevatedButton(
+                      onPressed: _returnToBooking,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.transparent,
+                        shadowColor: Colors.transparent,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(28),
+                        ),
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.check, color: Colors.white),
+                          SizedBox(width: 8),
+                          Text(
+                            'Continue',
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 16,

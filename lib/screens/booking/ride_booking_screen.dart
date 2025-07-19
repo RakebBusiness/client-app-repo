@@ -8,8 +8,19 @@ import 'dart:async';
 
 class RideBookingScreen extends StatefulWidget {
   final LatLng? currentLocation;
+  final LatLng? selectedPickupLocation;
+  final LatLng? selectedDestinationLocation;
+  final String selectedPickupAddress;
+  final String selectedDestinationAddress;
 
-  const RideBookingScreen({super.key, this.currentLocation});
+  const RideBookingScreen({
+    super.key, 
+    this.currentLocation,
+    this.selectedPickupLocation,
+    this.selectedDestinationLocation,
+    this.selectedPickupAddress = '',
+    this.selectedDestinationAddress = '',
+  });
 
   @override
   State<RideBookingScreen> createState() => _RideBookingScreenState();
@@ -30,8 +41,6 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
   bool _isSearchingDestination = false;
   bool _showStartSuggestions = false;
   bool _showDestinationSuggestions = false;
-  bool _isMapSelectionMode = false;
-  bool _isSelectingStart = false;
   Set<Marker> _markers = {};
   Timer? _searchTimer;
 
@@ -39,9 +48,31 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
   void initState() {
     super.initState();
     _initializeStartLocation();
+    _initializeSelectedLocations();
   }
 
+  void _initializeSelectedLocations() {
+    // Initialize with selected locations from home screen
+    if (widget.selectedPickupLocation != null) {
+      _startLocation = widget.selectedPickupLocation;
+      _startController.text = widget.selectedPickupAddress;
+    }
+    
+    if (widget.selectedDestinationLocation != null) {
+      _destinationLocation = widget.selectedDestinationLocation;
+      _destinationController.text = widget.selectedDestinationAddress;
+    }
+    
+    _updateMarkers();
+    
+    if (_startLocation != null && _destinationLocation != null) {
+      _fitMarkersInView();
+    }
+  }
   void _initializeStartLocation() async {
+    // Only set current location if no pickup location was selected
+    if (widget.selectedPickupLocation != null) return;
+    
     if (widget.currentLocation != null) {
       _startLocation = widget.currentLocation;
       try {
@@ -223,112 +254,26 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
     });
   }
 
-  void _onMapTap(LatLng position) async {
-    if (!_isMapSelectionMode) return;
 
-    try {
-      // Get address from coordinates
-      List<Placemark> placemarks = await placemarkFromCoordinates(
-        position.latitude,
-        position.longitude,
-      );
-      
-      String address = 'Selected Location';
-      if (placemarks.isNotEmpty) {
-        final placemark = placemarks.first;
-        address = '${placemark.street ?? ''}, ${placemark.locality ?? ''}'.trim();
-        if (address == ', ') {
-          address = '${placemark.name ?? 'Selected Location'}';
-        }
-      }
 
-      setState(() {
-        if (_isSelectingStart) {
-          _startLocation = position;
-          _startController.text = address;
-        } else {
-          _destinationLocation = position;
-          _destinationController.text = address;
-          _destinationFocusNode.unfocus();
-        }
-        _isMapSelectionMode = false;
-        _updateMarkers();
-      });
-
-      if (_startLocation != null && _destinationLocation != null) {
-        _fitMarkersInView();
-      }
-
-      // Hide any existing snackbars first
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_isSelectingStart ? 'Pickup location set!' : 'Destination set!'),
-          backgroundColor: const Color(0xFF32C156),
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    } catch (e) {
-      print('Error getting address: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to get address for selected location'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  void _startMapSelection(bool isStart) {
-    setState(() {
-      // Clear any existing suggestions
-      _showStartSuggestions = false;
-      _showDestinationSuggestions = false;
-      
-      _isMapSelectionMode = true;
-      _isSelectingStart = isStart;
-      _showStartSuggestions = false;
-      _showDestinationSuggestions = false;
-    });
-    
-    // Unfocus text fields
-    _startFocusNode.unfocus();
-    _destinationFocusNode.unfocus();
-    
-    // Hide keyboard
-    FocusScope.of(context).unfocus();
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(isStart ? 'Tap on the map to set pickup location' : 'Tap on the map to set destination'),
-        backgroundColor: const Color(0xFF32C156),
-        action: SnackBarAction(
-          label: 'Cancel',
-          textColor: Colors.white,
-          onPressed: () {
-            ScaffoldMessenger.of(context).hideCurrentSnackBar();
-            setState(() {
-              _isMapSelectionMode = false;
-            });
+  void _navigateToMapSelection(bool isStart) {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const HomeScreen(),
+        settings: RouteSettings(
+          arguments: {
+            'selectLocation': true,
+            'selectionType': isStart ? 'pickup' : 'destination',
+            'pickupLocation': _startLocation,
+            'destinationLocation': _destinationLocation,
+            'pickupAddress': _startController.text,
+            'destinationAddress': _destinationController.text,
           },
         ),
       ),
     );
   }
-
-  void _cancelMapSelection() {
-    setState(() {
-      _isMapSelectionMode = false;
-      _isSelectingStart = false;
-    });
-    
-    // Hide any existing snackbars
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    
-    FocusScope.of(context).unfocus();
-  }
-
   void _updateMarkers() {
     Set<Marker> markers = {};
     
@@ -667,7 +612,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
               ),
             ),
             child: TextButton.icon(
-              onPressed: () => _startMapSelection(isStart),
+              onPressed: () => _navigateToMapSelection(isStart),
               icon: Icon(
                 Icons.map,
                 size: 16,
@@ -843,7 +788,6 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
                               ),
                             ),
                           ),
-                      ],
                     ),
                   ),
                 ),
