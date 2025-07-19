@@ -236,7 +236,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
       String address = 'Selected Location';
       if (placemarks.isNotEmpty) {
         final placemark = placemarks.first;
-        address = '${placemark.street ?? ''}, ${placemark.locality ?? ''}';
+        address = '${placemark.street ?? ''}, ${placemark.locality ?? ''}'.trim();
         if (address == ', ') {
           address = '${placemark.name ?? 'Selected Location'}';
         }
@@ -249,6 +249,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
         } else {
           _destinationLocation = position;
           _destinationController.text = address;
+          _destinationFocusNode.unfocus();
         }
         _isMapSelectionMode = false;
         _updateMarkers();
@@ -258,6 +259,9 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
         _fitMarkersInView();
       }
 
+      // Hide any existing snackbars first
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(_isSelectingStart ? 'Pickup location set!' : 'Destination set!'),
@@ -266,6 +270,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
         ),
       );
     } catch (e) {
+      print('Error getting address: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to get address for selected location'),
@@ -277,6 +282,10 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
 
   void _startMapSelection(bool isStart) {
     setState(() {
+      // Clear any existing suggestions
+      _showStartSuggestions = false;
+      _showDestinationSuggestions = false;
+      
       _isMapSelectionMode = true;
       _isSelectingStart = isStart;
       _showStartSuggestions = false;
@@ -286,6 +295,9 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
     // Unfocus text fields
     _startFocusNode.unfocus();
     _destinationFocusNode.unfocus();
+    
+    // Hide keyboard
+    FocusScope.of(context).unfocus();
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -295,6 +307,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
           label: 'Cancel',
           textColor: Colors.white,
           onPressed: () {
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
             setState(() {
               _isMapSelectionMode = false;
             });
@@ -304,6 +317,18 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
     );
   }
 
+  void _cancelMapSelection() {
+    setState(() {
+      _isMapSelectionMode = false;
+      _isSelectingStart = false;
+    });
+    
+    // Hide any existing snackbars
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    
+    FocusScope.of(context).unfocus();
+  }
+
   void _updateMarkers() {
     Set<Marker> markers = {};
     
@@ -311,7 +336,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
       markers.add(Marker(
         markerId: const MarkerId('start'),
         position: _startLocation!,
-        infoWindow: InfoWindow(title: 'Pickup', snippet: _startController.text),
+        infoWindow: InfoWindow(title: 'Pickup Location', snippet: _startController.text),
         icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
       ));
     }
@@ -609,6 +634,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
                   onChanged: (value) => _onSearchChanged(value, isStart),
                   onTap: () {
                     setState(() {
+                      _isMapSelectionMode = false;
                       if (isStart) {
                         _showDestinationSuggestions = false;
                       } else {
@@ -642,7 +668,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
             ),
             child: TextButton.icon(
               onPressed: () => _startMapSelection(isStart),
-              icon: const Icon(
+              icon: Icon(
                 Icons.map,
                 size: 16,
                 color: Color(0xFF32C156),
@@ -650,7 +676,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
               label: const Text(
                 'or choose from map',
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 13,
                   color: Color(0xFF32C156),
                 ),
               ),
@@ -802,7 +828,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
                                     ),
                                     const SizedBox(height: 12),
                                     ElevatedButton(
-                                      onPressed: () {
+                                      onPressed: _cancelMapSelection,
                                         setState(() {
                                           _isMapSelectionMode = false;
                                         });
