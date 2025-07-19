@@ -1,214 +1,218 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../services/auth_service.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import '../profile/profile_screen.dart';
+import '../trips/trips_screen.dart';
+import '../promotions/promotions_screen.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final user = Supabase.instance.client.auth.currentUser;
-    
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: const Text(
-          'Rakib',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  late GoogleMapController mapController;
+  
+  // Default location (Algiers, Algeria)
+  static const CameraPosition _initialPosition = CameraPosition(
+    target: LatLng(36.7538, 3.0588),
+    zoom: 14.0,
+  );
+
+  void _onMapCreated(GoogleMapController controller) {
+    mapController = controller;
+  }
+
+  void _showNavigationMenu() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
-        backgroundColor: const Color(0xFF32C156),
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout, color: Colors.white),
-            onPressed: () {
-              _showLogoutDialog(context);
-            },
-          ),
-        ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(20),
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.symmetric(vertical: 12),
               decoration: BoxDecoration(
-                color: const Color(0xFF32C156).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(15),
-                border: Border.all(
-                  color: const Color(0xFF32C156).withOpacity(0.3),
-                ),
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Bienvenue !',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF32C156),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    user?.userMetadata?['display_name'] ?? 'Utilisateur',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    user?.phone ?? '',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey,
-                    ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.person, color: Color(0xFF32C156)),
+              title: const Text('My Profile'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const ProfileScreen()),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.directions_car, color: Color(0xFF32C156)),
+              title: const Text('My Trips'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const TripsScreen()),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.local_offer, color: Color(0xFF32C156)),
+              title: const Text('Promotions'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const PromotionsScreen()),
+                );
+              },
+            ),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Stack(
+        children: [
+          // Google Maps
+          GoogleMap(
+            onMapCreated: _onMapCreated,
+            initialCameraPosition: _initialPosition,
+            myLocationEnabled: true,
+            myLocationButtonEnabled: false,
+            zoomControlsEnabled: false,
+            mapToolbarEnabled: false,
+          ),
+          
+          // Top overlay with menu button
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 16,
+            left: 16,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 30),
-            const Text(
-              'Authentification réussie !',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-                color: Colors.black87,
+              child: IconButton(
+                icon: const Icon(Icons.more_vert, color: Color(0xFF32C156)),
+                onPressed: _showNavigationMenu,
+                iconSize: 24,
               ),
             ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.green.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.green.withOpacity(0.3)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.check_circle,
-                    color: Colors.green,
-                    size: 24,
+          ),
+
+          // App title
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 16,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: const Text(
+                  'Rakeb',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF32C156),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Compte vérifié',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: Colors.green,
-                          ),
-                        ),
-                        Text(
-                          'Votre numéro ${user?.phone} a été vérifié avec succès',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Colors.black54,
-                          ),
+                ),
+              ),
+            ),
+          ),
+
+          // Bottom action buttons
+          Positioned(
+            bottom: 30,
+            left: 20,
+            right: 20,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF32C156),
+                      borderRadius: BorderRadius.circular(28),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.2),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
                         ),
                       ],
                     ),
+                    child: ElevatedButton(
+                      onPressed: () {
+                        // TODO: Implement ride booking
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Book a ride feature coming soon!')),
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.transparent,
+                        shadowColor: Colors.transparent,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(28),
+                        ),
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.directions_car, color: Colors.white),
+                          SizedBox(width: 8),
+                          Text(
+                            'Book a Ride',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 30),
-            const Text(
-              'Informations du compte',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: Colors.black87,
-              ),
-            ),
-            const SizedBox(height: 16),
-            _buildInfoCard('ID Utilisateur', user?.id ?? 'N/A'),
-            const SizedBox(height: 12),
-            _buildInfoCard('Téléphone', user?.phone ?? 'N/A'),
-            const SizedBox(height: 12),
-            _buildInfoCard('Nom', user?.userMetadata?['display_name'] ?? 'N/A'),
-            const SizedBox(height: 12),
-            _buildInfoCard(
-              'Dernière connexion', 
-              user?.lastSignInAt?.toString().split('.')[0] ?? 'N/A'
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInfoCard(String label, String value) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.grey.withOpacity(0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: Colors.grey,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 14,
-              color: Colors.black87,
+                ),
+              ],
             ),
           ),
         ],
       ),
-    );
-  }
-
-  void _showLogoutDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Déconnexion'),
-          content: const Text('Êtes-vous sûr de vouloir vous déconnecter ?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Annuler'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                context.read<AuthService>().signOut();
-              },
-              child: const Text(
-                'Déconnexion',
-                style: TextStyle(color: Colors.red),
-              ),
-            ),
-          ],
-        );
-      },
     );
   }
 }
