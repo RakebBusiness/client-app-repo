@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:http/http.dart' as http;
+import 'package:geolocator/geolocator.dart';
 import '../profile/profile_screen.dart';
 import '../trips/trips_screen.dart';
 import '../promotions/promotions_screen.dart';
@@ -17,13 +18,17 @@ class _HomeScreenState extends State<HomeScreen> {
   final MapController mapController = MapController();
   
   // Default location (Algiers, Algeria)
-  static const LatLng _initialPosition = LatLng(36.7538, 3.0588);
+  LatLng _currentPosition = const LatLng(36.7538, 3.0588);
+  LatLng _userLocation = const LatLng(36.7538, 3.0588);
   bool _mapLoaded = false;
+  bool _locationLoaded = false;
+  bool _isLoadingLocation = false;
 
   @override
   void initState() {
     super.initState();
     _checkMapTiles();
+    _getCurrentLocation();
   }
 
   Future<void> _checkMapTiles() async {
@@ -42,6 +47,102 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _mapLoaded = true;
       });
+    }
+  }
+
+  Future<void> _getCurrentLocation() async {
+    setState(() {
+      _isLoadingLocation = true;
+    });
+
+    try {
+      // Check if location services are enabled
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        _showLocationDialog('Location services are disabled. Please enable location services.');
+        setState(() {
+          _isLoadingLocation = false;
+        });
+        return;
+      }
+
+      // Check location permissions
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          _showLocationDialog('Location permissions are denied. Please grant location access.');
+          setState(() {
+            _isLoadingLocation = false;
+          });
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        _showLocationDialog('Location permissions are permanently denied. Please enable them in settings.');
+        setState(() {
+          _isLoadingLocation = false;
+        });
+        return;
+      }
+
+      // Get current position
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 10),
+      );
+
+      setState(() {
+        _userLocation = LatLng(position.latitude, position.longitude);
+        _currentPosition = _userLocation;
+        _locationLoaded = true;
+        _isLoadingLocation = false;
+      });
+
+      // Move map to user location
+      mapController.move(_userLocation, 16.0);
+
+    } catch (e) {
+      print('Error getting location: $e');
+      _showLocationDialog('Failed to get your location. Using default location.');
+      setState(() {
+        _isLoadingLocation = false;
+      });
+    }
+  }
+
+  void _showLocationDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Location'),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('OK'),
+            ),
+            if (message.contains('settings'))
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  Geolocator.openAppSettings();
+                },
+                child: const Text('Open Settings'),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _moveToCurrentLocation() async {
+    if (_locationLoaded) {
+      mapController.move(_userLocation, 16.0);
+    } else {
+      await _getCurrentLocation();
     }
   }
 
@@ -116,7 +217,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ? FlutterMap(
                   mapController: mapController,
                   options: MapOptions(
-                    initialCenter: _initialPosition,
+                    initialCenter: _currentPosition,
                     initialZoom: 14.0,
                     minZoom: 3.0,
                     maxZoom: 18.0,
@@ -134,19 +235,43 @@ class _HomeScreenState extends State<HomeScreen> {
                     MarkerLayer(
                       markers: [
                         Marker(
-                          point: _initialPosition,
+                          point: _userLocation,
                           width: 40,
                           height: 40,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF32C156),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: Colors.white, width: 3),
-                            ),
-                            child: const Icon(
-                              Icons.person,
-                              color: Colors.white,
-                              size: 20,
+                          child: Stack(
+                            children: [
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF32C156),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: Colors.white, width: 3),
+                                ),
+                                child: const Icon(
+                                  Icons.person,
+                                  color: Colors.white,
+                                  size: 20,
+                                ),
+                              ),
+                              if (_isLoadingLocation)
+                                Positioned.fill(
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withOpacity(0.3),
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: const Center(
+                                      child: SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          color: Colors.white,
+                                          strokeWidth: 2,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
                             ),
                           ),
                         ),
@@ -165,7 +290,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         SizedBox(height: 16),
                         Text(
-                          'Loading map...',
+                          _isLoadingLocation ? 'Getting your location...' : 'Loading map...',
                           style: TextStyle(
                             fontSize: 16,
                             color: Colors.grey,
@@ -305,7 +430,7 @@ class _HomeScreenState extends State<HomeScreen> {
               child: IconButton(
                 icon: const Icon(Icons.my_location, color: Color(0xFF32C156)),
                 onPressed: () {
-                  mapController.move(_initialPosition, 14.0);
+                  _moveToCurrentLocation();
                 },
                 iconSize: 24,
               ),

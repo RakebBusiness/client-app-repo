@@ -7,6 +7,8 @@
     <!-- Location permissions for maps -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Background location (optional, for when app is in background) -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <!-- Network state permission -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Allow cleartext traffic for HTTP requests -->
