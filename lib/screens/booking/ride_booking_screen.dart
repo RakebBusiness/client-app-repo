@@ -30,6 +30,8 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
   bool _isSearchingDestination = false;
   bool _showStartSuggestions = false;
   bool _showDestinationSuggestions = false;
+  bool _isMapSelectionMode = false;
+  bool _isSelectingStart = false;
   Set<Marker> _markers = {};
   Timer? _searchTimer;
 
@@ -219,6 +221,87 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
       _updateMarkers();
       _fitMarkersInView();
     });
+  }
+
+  void _onMapTap(LatLng position) async {
+    if (!_isMapSelectionMode) return;
+
+    try {
+      // Get address from coordinates
+      List<Placemark> placemarks = await placemarkFromCoordinates(
+        position.latitude,
+        position.longitude,
+      );
+      
+      String address = 'Selected Location';
+      if (placemarks.isNotEmpty) {
+        final placemark = placemarks.first;
+        address = '${placemark.street ?? ''}, ${placemark.locality ?? ''}';
+        if (address == ', ') {
+          address = '${placemark.name ?? 'Selected Location'}';
+        }
+      }
+
+      setState(() {
+        if (_isSelectingStart) {
+          _startLocation = position;
+          _startController.text = address;
+        } else {
+          _destinationLocation = position;
+          _destinationController.text = address;
+        }
+        _isMapSelectionMode = false;
+        _updateMarkers();
+      });
+
+      if (_startLocation != null && _destinationLocation != null) {
+        _fitMarkersInView();
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_isSelectingStart ? 'Pickup location set!' : 'Destination set!'),
+          backgroundColor: const Color(0xFF32C156),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to get address for selected location'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  void _startMapSelection(bool isStart) {
+    setState(() {
+      _isMapSelectionMode = true;
+      _isSelectingStart = isStart;
+      _showStartSuggestions = false;
+      _showDestinationSuggestions = false;
+    });
+    
+    // Unfocus text fields
+    _startFocusNode.unfocus();
+    _destinationFocusNode.unfocus();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(isStart ? 'Tap on the map to set pickup location' : 'Tap on the map to set destination'),
+        backgroundColor: const Color(0xFF32C156),
+        action: SnackBarAction(
+          label: 'Cancel',
+          textColor: Colors.white,
+          onPressed: () {
+            setState(() {
+              _isMapSelectionMode = false;
+            });
+          },
+        ),
+      ),
+    );
   }
 
   void _updateMarkers() {
@@ -492,6 +575,98 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
     );
   }
 
+  Widget _buildLocationInput({
+    required TextEditingController controller,
+    required FocusNode focusNode,
+    required String hintText,
+    required IconData icon,
+    required Color iconColor,
+    required bool isStart,
+    required bool isLoading,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.withOpacity(0.3)),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                child: Icon(icon, color: iconColor, size: 20),
+              ),
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  focusNode: focusNode,
+                  decoration: InputDecoration(
+                    hintText: hintText,
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  onChanged: (value) => _onSearchChanged(value, isStart),
+                  onTap: () {
+                    setState(() {
+                      if (isStart) {
+                        _showDestinationSuggestions = false;
+                      } else {
+                        _showStartSuggestions = false;
+                      }
+                    });
+                  },
+                ),
+              ),
+              if (isLoading)
+                const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Color(0xFF32C156),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          // "Or choose from map" button
+          Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              border: Border(
+                top: BorderSide(color: Colors.grey.withOpacity(0.2)),
+              ),
+            ),
+            child: TextButton.icon(
+              onPressed: () => _startMapSelection(isStart),
+              icon: const Icon(
+                Icons.map,
+                size: 16,
+                color: Color(0xFF32C156),
+              ),
+              label: const Text(
+                'or choose from map',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF32C156),
+                ),
+              ),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.vertical(bottom: Radius.circular(12)),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -528,137 +703,125 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
                 child: Column(
                   children: [
                     // Start location input
-                    Container(
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.withOpacity(0.3)),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            child: const Icon(
-                              Icons.radio_button_checked,
-                              color: Color(0xFF32C156),
-                              size: 20,
-                            ),
-                          ),
-                          Expanded(
-                            child: TextField(
-                              controller: _startController,
-                              focusNode: _startFocusNode,
-                              decoration: const InputDecoration(
-                                hintText: 'Pick up location',
-                                border: InputBorder.none,
-                                contentPadding: EdgeInsets.symmetric(vertical: 12),
-                              ),
-                              onChanged: (value) => _onSearchChanged(value, true),
-                              onTap: () {
-                                setState(() {
-                                  _showDestinationSuggestions = false;
-                                });
-                              },
-                            ),
-                          ),
-                          if (_isSearchingStart)
-                            const Padding(
-                              padding: EdgeInsets.all(12),
-                              child: SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Color(0xFF32C156),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
+                    _buildLocationInput(
+                      controller: _startController,
+                      focusNode: _startFocusNode,
+                      hintText: 'Pick up location',
+                      icon: Icons.radio_button_checked,
+                      iconColor: const Color(0xFF32C156),
+                      isStart: true,
+                      isLoading: _isSearchingStart,
                     ),
                     
                     const SizedBox(height: 12),
                     
                     // Destination input
-                    Container(
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.withOpacity(0.3)),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            child: const Icon(
-                              Icons.location_on,
-                              color: Colors.red,
-                              size: 20,
-                            ),
-                          ),
-                          Expanded(
-                            child: TextField(
-                              controller: _destinationController,
-                              focusNode: _destinationFocusNode,
-                              decoration: const InputDecoration(
-                                hintText: 'Where to?',
-                                border: InputBorder.none,
-                                contentPadding: EdgeInsets.symmetric(vertical: 12),
-                              ),
-                              onChanged: (value) => _onSearchChanged(value, false),
-                              onTap: () {
-                                setState(() {
-                                  _showStartSuggestions = false;
-                                });
-                              },
-                            ),
-                          ),
-                          if (_isSearchingDestination)
-                            const Padding(
-                              padding: EdgeInsets.all(12),
-                              child: SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Color(0xFF32C156),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
+                    _buildLocationInput(
+                      controller: _destinationController,
+                      focusNode: _destinationFocusNode,
+                      hintText: 'Where to?',
+                      icon: Icons.location_on,
+                      iconColor: Colors.red,
+                      isStart: false,
+                      isLoading: _isSearchingDestination,
                     ),
                   ],
                 ),
               ),
               
-              // Map preview (if both locations selected)
-              if (_startLocation != null && _destinationLocation != null)
-                Expanded(
-                  child: Container(
-                    margin: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey.withOpacity(0.3)),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: GoogleMap(
-                        mapType: MapType.normal,
-                        initialCameraPosition: CameraPosition(
-                          target: _startLocation!,
-                          zoom: 12.0,
+              // Map preview
+              Expanded(
+                child: Container(
+                  margin: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Stack(
+                      children: [
+                        GoogleMap(
+                          mapType: MapType.normal,
+                          initialCameraPosition: CameraPosition(
+                            target: widget.currentLocation ?? const LatLng(36.7538, 3.0588),
+                            zoom: 12.0,
+                          ),
+                          onMapCreated: (GoogleMapController controller) {
+                            _controller.complete(controller);
+                          },
+                          markers: _markers,
+                          zoomControlsEnabled: false,
+                          mapToolbarEnabled: false,
+                          myLocationButtonEnabled: false,
+                          compassEnabled: true,
+                          onTap: _onMapTap,
                         ),
-                        onMapCreated: (GoogleMapController controller) {
-                          _controller.complete(controller);
-                        },
-                        markers: _markers,
-                        zoomControlsEnabled: false,
-                        mapToolbarEnabled: false,
-                        myLocationButtonEnabled: false,
-                        compassEnabled: true,
-                      ),
+                        // Map selection overlay
+                        if (_isMapSelectionMode)
+                          Container(
+                            color: Colors.black.withOpacity(0.3),
+                            child: Center(
+                              child: Container(
+                                padding: const EdgeInsets.all(16),
+                                margin: const EdgeInsets.all(20),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(12),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.2),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      _isSelectingStart ? Icons.radio_button_checked : Icons.location_on,
+                                      color: _isSelectingStart ? const Color(0xFF32C156) : Colors.red,
+                                      size: 32,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      _isSelectingStart ? 'Select Pickup Location' : 'Select Destination',
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    const Text(
+                                      'Tap anywhere on the map',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    ElevatedButton(
+                                      onPressed: () {
+                                        setState(() {
+                                          _isMapSelectionMode = false;
+                                        });
+                                      },
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.grey,
+                                      ),
+                                      child: const Text('Cancel', style: TextStyle(color: Colors.white)),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                 ),
+              ),
               
               // Book ride button
               Container(
@@ -691,7 +854,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
           // Start location suggestions
           if (_showStartSuggestions)
             Positioned(
-              top: 100,
+              top: 140,
               left: 16,
               right: 16,
               child: Container(
@@ -721,7 +884,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
           // Destination suggestions
           if (_showDestinationSuggestions)
             Positioned(
-              top: 164,
+              top: 240,
               left: 16,
               right: 16,
               child: Container(
