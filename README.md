@@ -1,15 +1,31 @@
 # Rakib - Flutter Supabase App
 
-A Flutter application using Supabase for authentication and backend services.
+A Flutter ride-sharing application using Supabase for authentication and backend services, with Google Maps integration.
 
 ## Setup Instructions
+
+### 0. Google Maps API Setup
+
+1. Go to the [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select an existing one
+3. Enable the following APIs:
+   - Maps SDK for Android
+   - Maps SDK for iOS
+   - Places API
+   - Geocoding API
+4. Create API credentials (API Key)
+5. Restrict the API key to your app's package name for security
+6. Replace `YOUR_GOOGLE_MAPS_API_KEY` in the following files:
+   - `android/app/src/main/AndroidManifest.xml`
+   - `ios/Runner/AppDelegate.swift`
+   - `lib/screens/booking/ride_booking_screen.dart`
 
 ### 1. Supabase Configuration
 
 1. Create a new project at [supabase.com](https://supabase.com)
 2. Go to Settings > API in your Supabase dashboard
 3. Copy your project URL and anon key
-4. Update the values in `lib/main.dart`:
+4. Replace `YOUR_SUPABASE_URL` and `YOUR_SUPABASE_ANON_KEY` in `lib/main.dart`:
 
 ```dart
 await Supabase.initialize(
@@ -71,7 +87,8 @@ flutter run
 
 ## Dependencies
 
-- `supabase_flutter`: Supabase client for Flutter
+- `google_maps_flutter`: Google Maps integration
+- `geolocator`: Location services
 - `provider`: State management
 - `pin_code_fields`: OTP input UI
 

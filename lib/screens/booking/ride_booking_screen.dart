@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:async';
 
 class RideBookingScreen extends StatefulWidget {
   final LatLng? currentLocation;
@@ -16,6 +16,7 @@ class RideBookingScreen extends StatefulWidget {
 }
 
 class _RideBookingScreenState extends State<RideBookingScreen> {
+  Completer<GoogleMapController> _controller = Completer();
   final TextEditingController _startController = TextEditingController();
   final TextEditingController _destinationController = TextEditingController();
   final FocusNode _startFocusNode = FocusNode();
@@ -29,6 +30,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
   bool _isSearchingDestination = false;
   bool _showStartSuggestions = false;
   bool _showDestinationSuggestions = false;
+  Set<Marker> _markers = {};
 
   @override
   void initState() {
@@ -77,10 +79,10 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
     });
 
     try {
-      // Using Nominatim API for location search (free OpenStreetMap service)
+      // Using Google Places API for location search
       final response = await http.get(
         Uri.parse(
-          'https://nominatim.openstreetmap.org/search?q=$query&format=json&limit=5&countrycodes=dz&addressdetails=1'
+          'https://maps.googleapis.com/maps/api/place/textsearch/json?query=$query&location=36.7538,3.0588&radius=50000&key=YOUR_GOOGLE_MAPS_API_KEY'
         ),
         headers: {
           'User-Agent': 'RakibApp/1.0',
@@ -89,11 +91,12 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
-        final suggestions = data.map((item) => LocationSuggestion(
-          displayName: item['display_name'] ?? '',
-          latitude: double.parse(item['lat']),
-          longitude: double.parse(item['lon']),
-          address: item['display_name'] ?? '',
+        final results = data['results'] as List<dynamic>;
+        final suggestions = results.map((item) => LocationSuggestion(
+          displayName: item['name'] ?? '',
+          latitude: item['geometry']['location']['lat'],
+          longitude: item['geometry']['location']['lng'],
+          address: item['formatted_address'] ?? '',
         )).toList();
 
         setState(() {
@@ -128,12 +131,40 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
         _startLocation = LatLng(suggestion.latitude, suggestion.longitude);
         _showStartSuggestions = false;
         _startFocusNode.unfocus();
+        _updateMarkers();
       } else {
         _destinationController.text = suggestion.displayName;
         _destinationLocation = LatLng(suggestion.latitude, suggestion.longitude);
         _showDestinationSuggestions = false;
         _destinationFocusNode.unfocus();
+        _updateMarkers();
       }
+    });
+  }
+
+  void _updateMarkers() {
+    Set<Marker> markers = {};
+    
+    if (_startLocation != null) {
+      markers.add(Marker(
+        markerId: const MarkerId('start'),
+        position: _startLocation!,
+        infoWindow: InfoWindow(title: 'Pickup', snippet: _startController.text),
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+      ));
+    }
+    
+    if (_destinationLocation != null) {
+      markers.add(Marker(
+        markerId: const MarkerId('destination'),
+        position: _destinationLocation!,
+        infoWindow: InfoWindow(title: 'Destination', snippet: _destinationController.text),
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+      ));
+    }
+    
+    setState(() {
+      _markers = markers;
     });
   }
 
@@ -344,41 +375,18 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(12),
-                      child: FlutterMap(
-                        options: MapOptions(
-                          initialCenter: _startLocation!,
-                          initialZoom: 12.0,
+                      child: GoogleMap(
+                        mapType: MapType.normal,
+                        initialCameraPosition: CameraPosition(
+                          target: _startLocation!,
+                          zoom: 12.0,
                         ),
-                        children: [
-                          TileLayer(
-                            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                            userAgentPackageName: 'com.rakib.app',
-                          ),
-                          MarkerLayer(
-                            markers: [
-                              Marker(
-                                point: _startLocation!,
-                                width: 40,
-                                height: 40,
-                                child: const Icon(
-                                  Icons.radio_button_checked,
-                                  color: Color(0xFF32C156),
-                                  size: 30,
-                                ),
-                              ),
-                              Marker(
-                                point: _destinationLocation!,
-                                width: 40,
-                                height: 40,
-                                child: const Icon(
-                                  Icons.location_on,
-                                  color: Colors.red,
-                                  size: 30,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
+                        onMapCreated: (GoogleMapController controller) {
+                          _controller.complete(controller);
+                        },
+                        markers: _markers,
+                        zoomControlsEnabled: false,
+                        mapToolbarEnabled: false,
                       ),
                     ),
                   ),

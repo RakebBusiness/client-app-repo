@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
-import 'package:http/http.dart' as http;
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
+import 'dart:async';
 import '../profile/profile_screen.dart';
 import '../trips/trips_screen.dart';
 import '../promotions/promotions_screen.dart';
@@ -16,39 +15,23 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final MapController mapController = MapController();
+  Completer<GoogleMapController> _controller = Completer();
   
   // Default location (Algiers, Algeria)
-  LatLng _currentPosition = const LatLng(36.7538, 3.0588);
+  static const CameraPosition _kAlgiers = CameraPosition(
+    target: LatLng(36.7538, 3.0588),
+    zoom: 14.0,
+  );
+  
   LatLng _userLocation = const LatLng(36.7538, 3.0588);
-  bool _mapLoaded = false;
   bool _locationLoaded = false;
   bool _isLoadingLocation = false;
+  Set<Marker> _markers = {};
 
   @override
   void initState() {
     super.initState();
-    _checkMapTiles();
     _getCurrentLocation();
-  }
-
-  Future<void> _checkMapTiles() async {
-    try {
-      final response = await http.get(
-        Uri.parse('https://tile.openstreetmap.org/14/8239/6057.png'),
-      );
-      if (response.statusCode == 200) {
-        setState(() {
-          _mapLoaded = true;
-        });
-      }
-    } catch (e) {
-      print('Map tiles check failed: $e');
-      // Still show map even if check fails
-      setState(() {
-        _mapLoaded = true;
-      });
-    }
   }
 
   Future<void> _getCurrentLocation() async {
@@ -96,13 +79,21 @@ class _HomeScreenState extends State<HomeScreen> {
 
       setState(() {
         _userLocation = LatLng(position.latitude, position.longitude);
-        _currentPosition = _userLocation;
         _locationLoaded = true;
         _isLoadingLocation = false;
+        _markers = {
+          Marker(
+            markerId: const MarkerId('user_location'),
+            position: _userLocation,
+            infoWindow: const InfoWindow(title: 'Your Location'),
+            icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+          ),
+        };
       });
 
       // Move map to user location
-      mapController.move(_userLocation, 16.0);
+      final GoogleMapController controller = await _controller.future;
+      controller.animateCamera(CameraUpdate.newLatLng(_userLocation));
 
     } catch (e) {
       print('Error getting location: $e');
@@ -141,7 +132,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _moveToCurrentLocation() async {
     if (_locationLoaded) {
-      mapController.move(_userLocation, 16.0);
+      final GoogleMapController controller = await _controller.future;
+      controller.animateCamera(CameraUpdate.newLatLng(_userLocation));
     } else {
       await _getCurrentLocation();
     }
@@ -214,93 +206,25 @@ class _HomeScreenState extends State<HomeScreen> {
       body: Stack(
         children: [
           // OpenStreetMap with Flutter Map
-          _mapLoaded
-              ? FlutterMap(
-                  mapController: mapController,
-                  options: MapOptions(
-                    initialCenter: _currentPosition,
-                    initialZoom: 14.0,
-                    minZoom: 3.0,
-                    maxZoom: 18.0,
-                  ),
-                  children: [
-                    TileLayer(
-                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.rakib.app',
-                      maxZoom: 18,
-                      additionalOptions: const {
-                        'id': 'openstreetmap',
-                      },
-                      tileProvider: NetworkTileProvider(),
-                    ),
-                    MarkerLayer(
-                      markers: [
-                        Marker(
-                          point: _userLocation,
-                          width: 40,
-                          height: 40,
-                          child: Stack(
-                            children: [
-                              Container(
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF32C156),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(color: Colors.white, width: 3),
-                                ),
-                                child: const Icon(
-                                  Icons.person,
-                                  color: Colors.white,
-                                  size: 20,
-                                ),
-                              ),
-                              if (_isLoadingLocation)
-                                Positioned.fill(
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: Colors.black.withOpacity(0.3),
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                    child: const Center(
-                                      child: SizedBox(
-                                        width: 16,
-                                        height: 16,
-                                        child: CircularProgressIndicator(
-                                          color: Colors.white,
-                                          strokeWidth: 2,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                            ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                )
-              : Container(
-                  color: Colors.grey[200],
-                  child: const Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        CircularProgressIndicator(
-                          color: Color(0xFF32C156),
-                        ),
-                        SizedBox(height: 16),
-                        Text(
-                          _isLoadingLocation ? 'Getting your location...' : 'Loading map...',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-              ),
+          GoogleMap(
+            mapType: MapType.normal,
+            initialCameraPosition: _kAlgiers,
+            onMapCreated: (GoogleMapController controller) {
+              _controller.complete(controller);
+            },
+            markers: _markers,
+            myLocationEnabled: true,
+            myLocationButtonEnabled: false,
+            zoomControlsEnabled: false,
+            mapToolbarEnabled: false,
+            compassEnabled: true,
+            trafficEnabled: false,
+            buildingsEnabled: true,
+            indoorViewEnabled: true,
+            onTap: (LatLng position) {
+              // Handle map tap if needed
+            },
+          ),
           
           // Top overlay with menu button
           Positioned(
@@ -377,11 +301,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   child: IconButton(
                     icon: const Icon(Icons.add, color: Color(0xFF32C156)),
-                    onPressed: () {
-                      mapController.move(
-                        mapController.camera.center,
-                        mapController.camera.zoom + 1,
-                      );
+                    onPressed: () async {
+                      final GoogleMapController controller = await _controller.future;
+                      controller.animateCamera(CameraUpdate.zoomIn());
                     },
                   ),
                 ),
@@ -400,11 +322,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   child: IconButton(
                     icon: const Icon(Icons.remove, color: Color(0xFF32C156)),
-                    onPressed: () {
-                      mapController.move(
-                        mapController.camera.center,
-                        mapController.camera.zoom - 1,
-                      );
+                    onPressed: () async {
+                      final GoogleMapController controller = await _controller.future;
+                      controller.animateCamera(CameraUpdate.zoomOut());
                     },
                   ),
                 ),
