@@ -5,6 +5,7 @@ import 'package:geocoding/geocoding.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:async';
+import '../home/home_screen.dart';
 
 class RideBookingScreen extends StatefulWidget {
   final LatLng? currentLocation;
@@ -27,7 +28,6 @@ class RideBookingScreen extends StatefulWidget {
 }
 
 class _RideBookingScreenState extends State<RideBookingScreen> {
-  Completer<GoogleMapController> _controller = Completer();
   final TextEditingController _startController = TextEditingController();
   final TextEditingController _destinationController = TextEditingController();
   final FocusNode _startFocusNode = FocusNode();
@@ -41,7 +41,6 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
   bool _isSearchingDestination = false;
   bool _showStartSuggestions = false;
   bool _showDestinationSuggestions = false;
-  Set<Marker> _markers = {};
   Timer? _searchTimer;
 
   @override
@@ -63,11 +62,6 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
       _destinationController.text = widget.selectedDestinationAddress;
     }
     
-    _updateMarkers();
-    
-    if (_startLocation != null && _destinationLocation != null) {
-      _fitMarkersInView();
-    }
   }
   void _initializeStartLocation() async {
     // Only set current location if no pickup location was selected
@@ -87,7 +81,6 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
       } catch (e) {
         _startController.text = 'Current Location';
       }
-      _updateMarkers();
     }
   }
 
@@ -249,8 +242,6 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
         _showDestinationSuggestions = false;
         _destinationFocusNode.unfocus();
       }
-      _updateMarkers();
-      _fitMarkersInView();
     });
   }
 
@@ -273,58 +264,6 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
         ),
       ),
     );
-  }
-  void _updateMarkers() {
-    Set<Marker> markers = {};
-    
-    if (_startLocation != null) {
-      markers.add(Marker(
-        markerId: const MarkerId('start'),
-        position: _startLocation!,
-        infoWindow: InfoWindow(title: 'Pickup Location', snippet: _startController.text),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
-      ));
-    }
-    
-    if (_destinationLocation != null) {
-      markers.add(Marker(
-        markerId: const MarkerId('destination'),
-        position: _destinationLocation!,
-        infoWindow: InfoWindow(title: 'Destination', snippet: _destinationController.text),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-      ));
-    }
-    
-    setState(() {
-      _markers = markers;
-    });
-  }
-
-  Future<void> _fitMarkersInView() async {
-    if (_startLocation != null && _destinationLocation != null) {
-      final GoogleMapController controller = await _controller.future;
-      
-      // Calculate bounds
-      double minLat = _startLocation!.latitude < _destinationLocation!.latitude 
-          ? _startLocation!.latitude : _destinationLocation!.latitude;
-      double maxLat = _startLocation!.latitude > _destinationLocation!.latitude 
-          ? _startLocation!.latitude : _destinationLocation!.latitude;
-      double minLng = _startLocation!.longitude < _destinationLocation!.longitude 
-          ? _startLocation!.longitude : _destinationLocation!.longitude;
-      double maxLng = _startLocation!.longitude > _destinationLocation!.longitude 
-          ? _startLocation!.longitude : _destinationLocation!.longitude;
-
-      // Add padding
-      double latPadding = (maxLat - minLat) * 0.2;
-      double lngPadding = (maxLng - minLng) * 0.2;
-
-      LatLngBounds bounds = LatLngBounds(
-        southwest: LatLng(minLat - latPadding, minLng - lngPadding),
-        northeast: LatLng(maxLat + latPadding, maxLng + lngPadding),
-      );
-
-      controller.animateCamera(CameraUpdate.newLatLngBounds(bounds, 100));
-    }
   }
 
   String _formatDistance(double distanceInMeters) {
@@ -700,98 +639,145 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
                 ),
               ),
               
-              // Map preview
-              Expanded(
-                child: Container(
+              // Trip summary section (when both locations are selected)
+              if (_startLocation != null && _destinationLocation != null)
+                Container(
                   margin: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
+                    color: const Color(0xFF32C156).withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                    border: Border.all(color: const Color(0xFF32C156).withOpacity(0.3)),
                   ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Stack(
-                      children: [
-                        GoogleMap(
-                          mapType: MapType.normal,
-                          initialCameraPosition: CameraPosition(
-                            target: widget.currentLocation ?? const LatLng(36.7538, 3.0588),
-                            zoom: 12.0,
-                          ),
-                          onMapCreated: (GoogleMapController controller) {
-                            _controller.complete(controller);
-                          },
-                          markers: _markers,
-                          zoomControlsEnabled: false,
-                          mapToolbarEnabled: false,
-                          myLocationButtonEnabled: false,
-                          compassEnabled: true,
-                          onTap: _onMapTap,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Trip Summary',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF32C156),
                         ),
-                        // Map selection overlay
-                        if (_isMapSelectionMode)
-                          Container(
-                            color: Colors.black.withOpacity(0.3),
-                            child: Center(
-                              child: Container(
-                                padding: const EdgeInsets.all(16),
-                                margin: const EdgeInsets.all(20),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(12),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withOpacity(0.2),
-                                      blurRadius: 8,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ],
-                                ),
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      _isSelectingStart ? Icons.radio_button_checked : Icons.location_on,
-                                      color: _isSelectingStart ? const Color(0xFF32C156) : Colors.red,
-                                      size: 32,
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      _isSelectingStart ? 'Select Pickup Location' : 'Select Destination',
-                                      style: const TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    const Text(
-                                      'Tap anywhere on the map',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        color: Colors.grey,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 12),
-                                    ElevatedButton(
-                                      onPressed: _cancelMapSelection,
-                                        setState(() {
-                                          _isMapSelectionMode = false;
-                                        });
-                                      },
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.grey,
-                                      ),
-                                      child: const Text('Cancel', style: TextStyle(color: Colors.white)),
-                                    ),
-                                  ],
-                                ),
-                              ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          const Icon(Icons.radio_button_checked, color: Color(0xFF32C156), size: 16),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'From: ${_startController.text}',
+                              style: const TextStyle(fontSize: 14),
                             ),
                           ),
-                    ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          const Icon(Icons.location_on, color: Colors.red, size: 16),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'To: ${_destinationController.text}',
+                              style: const TextStyle(fontSize: 14),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Distance',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                                Text(
+                                  '${(Geolocator.distanceBetween(
+                                    _startLocation!.latitude,
+                                    _startLocation!.longitude,
+                                    _destinationLocation!.latitude,
+                                    _destinationLocation!.longitude,
+                                  ) / 1000).toStringAsFixed(1)} km',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Est. Time',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                                Text(
+                                  '${((Geolocator.distanceBetween(
+                                    _startLocation!.latitude,
+                                    _startLocation!.longitude,
+                                    _destinationLocation!.latitude,
+                                    _destinationLocation!.longitude,
+                                  ) / 1000) * 3).round()} min',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Est. Price',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                                Text(
+                                  '${(100 + ((Geolocator.distanceBetween(
+                                    _startLocation!.latitude,
+                                    _startLocation!.longitude,
+                                    _destinationLocation!.latitude,
+                                    _destinationLocation!.longitude,
+                                  ) / 1000) * 50)).round()} DA',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF32C156),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ),
+              
+              // Spacer to push button to bottom
+              const Spacer(),
               
               // Book ride button
               Container(
