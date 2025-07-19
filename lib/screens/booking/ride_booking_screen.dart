@@ -31,6 +31,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
   bool _showStartSuggestions = false;
   bool _showDestinationSuggestions = false;
   Set<Marker> _markers = {};
+  Timer? _searchTimer;
 
   @override
   void initState() {
@@ -53,10 +54,14 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
       } catch (e) {
         _startController.text = 'Current Location';
       }
+      _updateMarkers();
     }
   }
 
-  Future<void> _searchLocation(String query, bool isStart) async {
+  void _onSearchChanged(String query, bool isStart) {
+    // Cancel previous timer
+    _searchTimer?.cancel();
+    
     if (query.length < 3) {
       setState(() {
         if (isStart) {
@@ -70,6 +75,13 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
       return;
     }
 
+    // Debounce search requests
+    _searchTimer = Timer(const Duration(milliseconds: 500), () {
+      _searchLocation(query, isStart);
+    });
+  }
+
+  Future<void> _searchLocation(String query, bool isStart) async {
     setState(() {
       if (isStart) {
         _isSearchingStart = true;
@@ -79,10 +91,15 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
     });
 
     try {
-      // Using Google Places API for location search
+      // Using Google Places API for location search with bias towards Algeria
       final response = await http.get(
         Uri.parse(
-          'https://maps.googleapis.com/maps/api/place/textsearch/json?query=$query&location=36.7538,3.0588&radius=50000&key=YOUR_GOOGLE_MAPS_API_KEY'
+          'https://maps.googleapis.com/maps/api/place/textsearch/json?'
+          'query=${Uri.encodeComponent(query)}&'
+          'location=36.7538,3.0588&'
+          'radius=100000&'
+          'region=dz&'
+          'key=YOUR_GOOGLE_MAPS_API_KEY'
         ),
         headers: {
           'User-Agent': 'RakibApp/1.0',
@@ -90,14 +107,61 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
       );
 
       if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(response.body);
+        final data = json.decode(response.body);
         final results = data['results'] as List<dynamic>;
-        final suggestions = results.map((item) => LocationSuggestion(
-          displayName: item['name'] ?? '',
-          latitude: item['geometry']['location']['lat'],
-          longitude: item['geometry']['location']['lng'],
-          address: item['formatted_address'] ?? '',
-        )).toList();
+        
+        // Reference location for distance calculation
+        LatLng referenceLocation;
+        if (isStart) {
+          // For start location, use current location if available
+          referenceLocation = widget.currentLocation ?? const LatLng(36.7538, 3.0588);
+        } else {
+          // For destination, use start location if available, otherwise current location
+          referenceLocation = _startLocation ?? widget.currentLocation ?? const LatLng(36.7538, 3.0588);
+        }
+
+        final suggestions = await Future.wait(
+          results.take(8).map((item) async {
+            final lat = item['geometry']['location']['lat'];
+            final lng = item['geometry']['location']['lng'];
+            final location = LatLng(lat, lng);
+            
+            // Calculate distance from reference point
+            final distance = Geolocator.distanceBetween(
+              referenceLocation.latitude,
+              referenceLocation.longitude,
+              lat,
+              lng,
+            );
+
+            // Get more detailed address information
+            String detailedAddress = item['formatted_address'] ?? '';
+            String businessStatus = '';
+            double? rating;
+            
+            if (item['business_status'] != null) {
+              businessStatus = item['business_status'];
+            }
+            
+            if (item['rating'] != null) {
+              rating = item['rating'].toDouble();
+            }
+
+            return LocationSuggestion(
+              displayName: item['name'] ?? '',
+              latitude: lat,
+              longitude: lng,
+              address: detailedAddress,
+              distance: distance,
+              businessStatus: businessStatus,
+              rating: rating,
+              types: List<String>.from(item['types'] ?? []),
+            );
+          }).toList(),
+        );
+
+        // Sort by distance
+        suggestions.sort((a, b) => a.distance.compareTo(b.distance));
 
         setState(() {
           if (isStart) {
@@ -110,17 +174,32 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
             _isSearchingDestination = false;
           }
         });
+      } else {
+        throw Exception('Failed to search locations');
       }
     } catch (e) {
+      print('Search error: $e');
       setState(() {
         if (isStart) {
           _isSearchingStart = false;
           _showStartSuggestions = false;
+          _startSuggestions = [];
         } else {
           _isSearchingDestination = false;
           _showDestinationSuggestions = false;
+          _destinationSuggestions = [];
         }
       });
+      
+      // Show error message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to search locations: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -131,14 +210,14 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
         _startLocation = LatLng(suggestion.latitude, suggestion.longitude);
         _showStartSuggestions = false;
         _startFocusNode.unfocus();
-        _updateMarkers();
       } else {
         _destinationController.text = suggestion.displayName;
         _destinationLocation = LatLng(suggestion.latitude, suggestion.longitude);
         _showDestinationSuggestions = false;
         _destinationFocusNode.unfocus();
-        _updateMarkers();
       }
+      _updateMarkers();
+      _fitMarkersInView();
     });
   }
 
@@ -168,9 +247,68 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
     });
   }
 
+  Future<void> _fitMarkersInView() async {
+    if (_startLocation != null && _destinationLocation != null) {
+      final GoogleMapController controller = await _controller.future;
+      
+      // Calculate bounds
+      double minLat = _startLocation!.latitude < _destinationLocation!.latitude 
+          ? _startLocation!.latitude : _destinationLocation!.latitude;
+      double maxLat = _startLocation!.latitude > _destinationLocation!.latitude 
+          ? _startLocation!.latitude : _destinationLocation!.latitude;
+      double minLng = _startLocation!.longitude < _destinationLocation!.longitude 
+          ? _startLocation!.longitude : _destinationLocation!.longitude;
+      double maxLng = _startLocation!.longitude > _destinationLocation!.longitude 
+          ? _startLocation!.longitude : _destinationLocation!.longitude;
+
+      // Add padding
+      double latPadding = (maxLat - minLat) * 0.2;
+      double lngPadding = (maxLng - minLng) * 0.2;
+
+      LatLngBounds bounds = LatLngBounds(
+        southwest: LatLng(minLat - latPadding, minLng - lngPadding),
+        northeast: LatLng(maxLat + latPadding, maxLng + lngPadding),
+      );
+
+      controller.animateCamera(CameraUpdate.newLatLngBounds(bounds, 100));
+    }
+  }
+
+  String _formatDistance(double distanceInMeters) {
+    if (distanceInMeters < 1000) {
+      return '${distanceInMeters.round()}m';
+    } else {
+      return '${(distanceInMeters / 1000).toStringAsFixed(1)}km';
+    }
+  }
+
+  IconData _getLocationIcon(List<String> types) {
+    if (types.contains('restaurant') || types.contains('food')) {
+      return Icons.restaurant;
+    } else if (types.contains('hospital') || types.contains('pharmacy')) {
+      return Icons.local_hospital;
+    } else if (types.contains('school') || types.contains('university')) {
+      return Icons.school;
+    } else if (types.contains('shopping_mall') || types.contains('store')) {
+      return Icons.shopping_bag;
+    } else if (types.contains('gas_station')) {
+      return Icons.local_gas_station;
+    } else if (types.contains('bank') || types.contains('atm')) {
+      return Icons.account_balance;
+    } else if (types.contains('mosque') || types.contains('church')) {
+      return Icons.place;
+    } else if (types.contains('airport')) {
+      return Icons.flight;
+    } else if (types.contains('bus_station') || types.contains('transit_station')) {
+      return Icons.directions_bus;
+    } else {
+      return Icons.location_on;
+    }
+  }
+
   void _confirmBooking() {
     if (_startLocation != null && _destinationLocation != null) {
-      // Calculate distance
+      // Calculate distance and estimated time
       final distance = Geolocator.distanceBetween(
         _startLocation!.latitude,
         _startLocation!.longitude,
@@ -178,8 +316,11 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
         _destinationLocation!.longitude,
       );
       
-      final distanceKm = (distance / 1000).toStringAsFixed(1);
-      final estimatedPrice = (distance / 1000 * 50).toInt(); // 50 DA per km
+      final distanceKm = (distance / 1000);
+      final estimatedTimeMinutes = (distanceKm * 3).round(); // Assuming 20km/h average speed
+      final basePrice = 100; // Base price in DA
+      final pricePerKm = 50; // Price per km in DA
+      final estimatedPrice = (basePrice + (distanceKm * pricePerKm)).round();
 
       showDialog(
         context: context,
@@ -189,13 +330,56 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('From: ${_startController.text}'),
+              Row(
+                children: [
+                  const Icon(Icons.radio_button_checked, color: Color(0xFF32C156), size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text('From: ${_startController.text}', style: const TextStyle(fontSize: 14))),
+                ],
+              ),
               const SizedBox(height: 8),
-              Text('To: ${_destinationController.text}'),
-              const SizedBox(height: 8),
-              Text('Distance: $distanceKm km'),
-              const SizedBox(height: 8),
-              Text('Estimated Price: $estimatedPrice DA'),
+              Row(
+                children: [
+                  const Icon(Icons.location_on, color: Colors.red, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text('To: ${_destinationController.text}', style: const TextStyle(fontSize: 14))),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Distance:', style: TextStyle(fontWeight: FontWeight.w500)),
+                        Text('${distanceKm.toStringAsFixed(1)} km'),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Estimated Time:', style: TextStyle(fontWeight: FontWeight.w500)),
+                        Text('$estimatedTimeMinutes min'),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Estimated Price:', style: TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF32C156))),
+                        Text('$estimatedPrice DA', style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF32C156))),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
           actions: [
@@ -208,7 +392,10 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
                 Navigator.pop(context);
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Ride booked successfully!')),
+                  const SnackBar(
+                    content: Text('Ride booked successfully! Looking for nearby drivers...'),
+                    backgroundColor: Color(0xFF32C156),
+                  ),
                 );
               },
               style: ElevatedButton.styleFrom(
@@ -221,9 +408,88 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select both start and destination')),
+        const SnackBar(content: Text('Please select both pickup and destination locations')),
       );
     }
+  }
+
+  Widget _buildSuggestionTile(LocationSuggestion suggestion, bool isStart) {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: Colors.grey.withOpacity(0.2)),
+        ),
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        leading: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: const Color(0xFF32C156).withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(
+            _getLocationIcon(suggestion.types),
+            color: const Color(0xFF32C156),
+            size: 20,
+          ),
+        ),
+        title: Text(
+          suggestion.displayName,
+          style: const TextStyle(fontWeight: FontWeight.w500),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              suggestion.address,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[600],
+              ),
+            ),
+            const SizedBox(height: 2),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF32C156).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    _formatDistance(suggestion.distance),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFF32C156),
+                    ),
+                  ),
+                ),
+                if (suggestion.rating != null) ...[
+                  const SizedBox(width: 8),
+                  Row(
+                    children: [
+                      const Icon(Icons.star, size: 12, color: Colors.orange),
+                      const SizedBox(width: 2),
+                      Text(
+                        suggestion.rating!.toStringAsFixed(1),
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
+        onTap: () => _selectLocation(suggestion, isStart),
+      ),
+    );
   }
 
   @override
@@ -286,7 +552,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
                                 border: InputBorder.none,
                                 contentPadding: EdgeInsets.symmetric(vertical: 12),
                               ),
-                              onChanged: (value) => _searchLocation(value, true),
+                              onChanged: (value) => _onSearchChanged(value, true),
                               onTap: () {
                                 setState(() {
                                   _showDestinationSuggestions = false;
@@ -337,7 +603,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
                                 border: InputBorder.none,
                                 contentPadding: EdgeInsets.symmetric(vertical: 12),
                               ),
-                              onChanged: (value) => _searchLocation(value, false),
+                              onChanged: (value) => _onSearchChanged(value, false),
                               onTap: () {
                                 setState(() {
                                   _showStartSuggestions = false;
@@ -387,6 +653,8 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
                         markers: _markers,
                         zoomControlsEnabled: false,
                         mapToolbarEnabled: false,
+                        myLocationButtonEnabled: false,
+                        compassEnabled: true,
                       ),
                     ),
                   ),
@@ -427,6 +695,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
               left: 16,
               right: 16,
               child: Container(
+                constraints: const BoxConstraints(maxHeight: 300),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(12),
@@ -443,15 +712,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
                   itemCount: _startSuggestions.length,
                   itemBuilder: (context, index) {
                     final suggestion = _startSuggestions[index];
-                    return ListTile(
-                      leading: const Icon(Icons.location_on, color: Colors.grey),
-                      title: Text(
-                        suggestion.displayName,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      onTap: () => _selectLocation(suggestion, true),
-                    );
+                    return _buildSuggestionTile(suggestion, true);
                   },
                 ),
               ),
@@ -464,6 +725,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
               left: 16,
               right: 16,
               child: Container(
+                constraints: const BoxConstraints(maxHeight: 300),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(12),
@@ -480,15 +742,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
                   itemCount: _destinationSuggestions.length,
                   itemBuilder: (context, index) {
                     final suggestion = _destinationSuggestions[index];
-                    return ListTile(
-                      leading: const Icon(Icons.location_on, color: Colors.grey),
-                      title: Text(
-                        suggestion.displayName,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      onTap: () => _selectLocation(suggestion, false),
-                    );
+                    return _buildSuggestionTile(suggestion, false);
                   },
                 ),
               ),
@@ -500,6 +754,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
 
   @override
   void dispose() {
+    _searchTimer?.cancel();
     _startController.dispose();
     _destinationController.dispose();
     _startFocusNode.dispose();
@@ -513,11 +768,19 @@ class LocationSuggestion {
   final double latitude;
   final double longitude;
   final String address;
+  final double distance; // Distance in meters
+  final String businessStatus;
+  final double? rating;
+  final List<String> types;
 
   LocationSuggestion({
     required this.displayName,
     required this.latitude,
     required this.longitude,
     required this.address,
+    required this.distance,
+    this.businessStatus = '',
+    this.rating,
+    this.types = const [],
   });
 }
