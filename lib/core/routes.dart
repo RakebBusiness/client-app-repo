@@ -7,7 +7,7 @@ import '../screens/auth/username_screen.dart';
 import '../screens/home/home_screen.dart';
 
 final Map<String, WidgetBuilder> appRoutes = {
-  '/': (context) => const AuthWrapper(),
+  '/': (context) => const AuthLoadingScreen(),
   '/login': (context) => const LoginScreen(),
   '/signup': (context) => const SignupScreen(),
   '/otp': (context) => const OtpScreen(),

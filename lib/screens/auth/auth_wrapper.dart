@@ -12,12 +12,26 @@ class AuthWrapper extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<AuthService>(
       builder: (context, authService, child) {
-        // Show loading while checking auth state
-        if (authService.state.status == AppAuthStatus.initial) {
+        // Show loading while initializing or checking auth state
+        if (!authService.isInitialized || authService.state.status == AppAuthStatus.initial) {
           return const Scaffold(
+            backgroundColor: Color(0xFF32C156),
             body: Center(
-              child: CircularProgressIndicator(
-                color: Color(0xFF32C156),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(
+                    color: Colors.white,
+                  ),
+                  SizedBox(height: 20),
+                  Text(
+                    'Loading...',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                    ),
+                  ),
+                ],
               ),
             ),
           );

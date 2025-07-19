@@ -6,12 +6,18 @@ import '../models/auth_state.dart';
 class AuthService extends ChangeNotifier {
   final SupabaseClient _supabase = Supabase.instance.client;
   AppAuthState _state = const AppAuthState();
+  bool _isInitialized = false;
 
   AppAuthState get state => _state;
   User? get currentUser => _supabase.auth.currentUser;
   bool get isAuthenticated => currentUser != null;
+  bool get isInitialized => _isInitialized;
 
   AuthService() {
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
     _supabase.auth.onAuthStateChange.listen((data) {
       final AuthChangeEvent event = data.event;
       final Session? session = data.session;
@@ -27,17 +33,27 @@ class AuthService extends ChangeNotifier {
     });
     
     // Check initial auth state
-    _checkInitialAuthState();
+    await _checkInitialAuthState();
+    _isInitialized = true;
+    notifyListeners();
   }
 
-  void _checkInitialAuthState() {
-    final session = _supabase.auth.currentSession;
-    if (session != null) {
-      _updateState(_state.copyWith(
-        status: AppAuthStatus.authenticated,
-        userId: session.user.id,
-      ));
-    } else {
+  Future<void> _checkInitialAuthState() async {
+    try {
+      // Add a small delay to ensure Supabase is fully initialized
+      await Future.delayed(const Duration(milliseconds: 100));
+      
+      final session = _supabase.auth.currentSession;
+      if (session != null) {
+        _updateState(_state.copyWith(
+          status: AppAuthStatus.authenticated,
+          userId: session.user.id,
+        ));
+      } else {
+        _updateState(_state.copyWith(status: AppAuthStatus.unauthenticated));
+      }
+    } catch (e) {
+      print('Error checking initial auth state: $e');
       _updateState(_state.copyWith(status: AppAuthStatus.unauthenticated));
     }
   }
