@@ -69,21 +69,35 @@ class AuthService extends ChangeNotifier {
 
       // Format phone number properly for Algeria (+213)
       String formattedPhone = phoneNumber;
-      if (!phoneNumber.startsWith('+')) {
-        // For Algerian numbers: 05/06/07 XXXXXXX -> +213 5/6/7 XX XX XX XX
-        if (phoneNumber.startsWith('0')) {
-          // Remove the leading 0 and add +213
-          formattedPhone = '+213 ${phoneNumber.substring(1)}';
-        } else {
-          // Add +213 directly
-          formattedPhone = '+213 $phoneNumber';
-        }
+      
+      // Clean the phone number first (remove spaces, dashes, etc.)
+      String cleanPhone = phoneNumber.replaceAll(RegExp(r'[\s\-\(\)]'), '');
+      
+      // Format for Algeria (+213)
+      if (cleanPhone.startsWith('+213')) {
+        // Already has country code, just clean it
+        formattedPhone = cleanPhone;
+      } else if (cleanPhone.startsWith('213')) {
+        // Has country code without +
+        formattedPhone = '+$cleanPhone';
+      } else if (cleanPhone.startsWith('0')) {
+        // Local format: 0512345678 -> +213512345678
+        formattedPhone = '+213${cleanPhone.substring(1)}';
+      } else if (cleanPhone.length == 9 && (cleanPhone.startsWith('5') || cleanPhone.startsWith('6') || cleanPhone.startsWith('7'))) {
+        // Already without leading 0: 512345678 -> +213512345678
+        formattedPhone = '+213$cleanPhone';
+      } else {
+        // Default case - assume it needs +213
+        formattedPhone = '+213$cleanPhone';
       }
-
-      // Ensure proper spacing for international format
-      if (formattedPhone.startsWith('+213') && !formattedPhone.contains(' ')) {
-        // Add space after country code if missing
-        formattedPhone = formattedPhone.replaceAll('+213', '+213 ');
+      
+      // Validate the final format
+      if (!RegExp(r'^\+213[567]\d{8}$').hasMatch(formattedPhone)) {
+        _updateState(_state.copyWith(
+          status: AppAuthStatus.error,
+          error: 'Format de numéro invalide. Utilisez: 05XXXXXXXX, 06XXXXXXXX ou 07XXXXXXXX',
+        ));
+        return;
       }
 
       print('Attempting to send OTP to: $formattedPhone');

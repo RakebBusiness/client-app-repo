@@ -52,11 +52,25 @@ class _LoginScreenState extends State<LoginScreen> {
   void _validateAndProceed() {
     String phone = _phoneController.text.trim();
 
-    // Validation for Algerian mobile numbers
-    // Format: 05/06/07 followed by 8 digits (total 10 digits)
+    // Enhanced validation for Algerian mobile numbers
+    // Clean the input first
+    String cleanPhone = phone.replaceAll(RegExp(r'[\s\-\(\)]'), '');
+    
+    // Check various valid formats
     final validPrefixes = ['05', '06', '07'];
-    final isValid = RegExp(r'^\d{10}$').hasMatch(phone) &&
-        validPrefixes.contains(phone.substring(0, 2));
+    bool isValid = false;
+    
+    if (cleanPhone.length == 10 && cleanPhone.startsWith('0')) {
+      // Format: 0512345678
+      isValid = validPrefixes.contains(cleanPhone.substring(0, 2));
+    } else if (cleanPhone.length == 9 && (cleanPhone.startsWith('5') || cleanPhone.startsWith('6') || cleanPhone.startsWith('7'))) {
+      // Format: 512345678
+      isValid = true;
+    } else if (cleanPhone.startsWith('+213') && cleanPhone.length == 13) {
+      // Format: +213512345678
+      String localPart = cleanPhone.substring(4);
+      isValid = localPart.length == 9 && (localPart.startsWith('5') || localPart.startsWith('6') || localPart.startsWith('7'));
+    }
 
     if (!_acceptedTerms) {
       setState(() => _error = 'Vous devez accepter les conditions.');
@@ -64,7 +78,7 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     if (!isValid) {
-      setState(() => _error = 'Numéro invalide. Format requis: 05XXXXXXXX, 06XXXXXXXX ou 07XXXXXXXX (10 chiffres)');
+      setState(() => _error = 'Numéro invalide. Formats acceptés: 05XXXXXXXX, 06XXXXXXXX, 07XXXXXXXX, 5XXXXXXXX, 6XXXXXXXX, 7XXXXXXXX ou +213XXXXXXXXX');
     } else {
       setState(() => _error = null);
       _showChannelChoiceMenu(context);
@@ -120,7 +134,6 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _requestOTP() {
-    // Format the phone number for Algeria (+213)
     final phoneNumber = _phoneController.text.trim();
     context.read<AuthService>().requestOTP(phoneNumber);
   }
