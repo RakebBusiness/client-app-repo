@@ -12,14 +12,22 @@ class RiderService {
   }) async {
     try {
       // Using the get_nearby_motards function from our database
-      final response = await _supabase.rpc('get_nearby_motards', params: {
-        'client_location': 'POINT(${userLocation.longitude} ${userLocation.latitude})',
-        'radius_km': radiusKm,
-      });
+      // Try using the RPC function first
+      try {
+        final response = await _supabase.rpc('get_nearby_motards', params: {
+          'client_location': 'POINT(${userLocation.longitude} ${userLocation.latitude})',
+          'radius_km': radiusKm,
+        });
 
-      if (response == null) return [];
+        if (response != null && response is List) {
+          return (response as List).map((rider) => RiderData.fromJson(rider)).toList();
+        }
+      } catch (rpcError) {
+        print('RPC function failed, using fallback: $rpcError');
+      }
 
-      return (response as List).map((rider) => RiderData.fromJson(rider)).toList();
+      // Fallback to direct query
+      return await _getFallbackRiders(userLocation, radiusKm);
     } catch (e) {
       print('Error fetching nearby riders: $e');
       
@@ -31,49 +39,69 @@ class RiderService {
   // Fallback method if the RPC function doesn't work
   Future<List<RiderData>> _getFallbackRiders(LatLng userLocation, double radiusKm) async {
     try {
+      print('🔍 Fetching riders using fallback method...');
+      
       final response = await _supabase
           .from('motards')
-          .select('id, nom_complet, num_tel, rating_average, current_location, status')
+          .select('id, nom_complet, num_tel, rating_average, current_location, status, total_rides')
           .eq('status', 'online')
           .eq('statut_bloque', false)
           .eq('is_verified', true)
-          .not('current_location', 'is', null);
+          .not('current_location', 'is', null)
+          .limit(20);
 
-      if (response == null) return [];
+      if (response == null || response.isEmpty) {
+        print('⚠️ No riders found in database');
+        return [];
+      }
+      
+      print('📍 Found ${response.length} riders in database');
 
       List<RiderData> riders = [];
       
       for (var rider in response) {
         if (rider['current_location'] != null) {
-          // Parse PostGIS point format: POINT(longitude latitude)
-          String locationStr = rider['current_location'].toString();
-          if (locationStr.startsWith('POINT(')) {
-            String coords = locationStr.substring(6, locationStr.length - 1);
-            List<String> parts = coords.split(' ');
-            if (parts.length == 2) {
-              double lng = double.parse(parts[0]);
-              double lat = double.parse(parts[1]);
-              
-              // Calculate distance
-              double distance = Geolocator.distanceBetween(
-                userLocation.latitude,
-                userLocation.longitude,
-                lat,
-                lng,
-              ) / 1000; // Convert to km
-              
-              if (distance <= radiusKm) {
-                riders.add(RiderData(
-                  id: rider['id'],
-                  nomComplet: rider['nom_complet'] ?? 'Unknown',
-                  numTel: rider['num_tel'] ?? '',
-                  ratingAverage: (rider['rating_average'] ?? 0.0).toDouble(),
-                  currentLocation: LatLng(lat, lng),
-                  distanceKm: distance,
-                  status: rider['status'] ?? 'offline',
-                ));
+          try {
+            // Parse PostGIS point format: POINT(longitude latitude)
+            String locationStr = rider['current_location'].toString();
+            print('📍 Parsing location: $locationStr');
+            
+            if (locationStr.startsWith('POINT(')) {
+              String coords = locationStr.substring(6, locationStr.length - 1);
+              List<String> parts = coords.split(' ');
+              if (parts.length == 2) {
+                double lng = double.tryParse(parts[0]) ?? 0.0;
+                double lat = double.tryParse(parts[1]) ?? 0.0;
+                
+                if (lng != 0.0 && lat != 0.0) {
+                  // Calculate distance
+                  double distance = Geolocator.distanceBetween(
+                    userLocation.latitude,
+                    userLocation.longitude,
+                    lat,
+                    lng,
+                  ) / 1000; // Convert to km
+                  
+                  print('📏 Distance to ${rider['nom_complet']}: ${distance.toStringAsFixed(2)}km');
+                  
+                  if (distance <= radiusKm) {
+                    riders.add(RiderData(
+                      id: rider['id'],
+                      nomComplet: rider['nom_complet'] ?? 'Unknown',
+                      numTel: rider['num_tel'] ?? '',
+                      ratingAverage: (rider['rating_average'] ?? 0.0).toDouble(),
+                      currentLocation: LatLng(lat, lng),
+                      distanceKm: distance,
+                      status: rider['status'] ?? 'offline',
+                    ));
+                  }
+                }
               }
+            } else {
+              print('⚠️ Invalid location format: $locationStr');
             }
+          } catch (parseError) {
+            print('❌ Error parsing location for rider ${rider['nom_complet']}: $parseError');
           }
         }
       }
@@ -81,6 +109,7 @@ class RiderService {
       // Sort by distance
       riders.sort((a, b) => a.distanceKm.compareTo(b.distanceKm));
       
+      print('✅ Found ${riders.length} riders within ${radiusKm}km');
       return riders;
     } catch (e) {
       print('Error in fallback rider fetch: $e');
@@ -102,8 +131,9 @@ class RiderService {
         return;
       }
       
+      print('🏍️ Creating test riders in Lakhdaria area...');
+      
       // Lakhdaria coordinates: approximately 36.5644° N, 3.5892° E
-      final baseLocation = LatLng(36.5644, 3.5892);
       
       final testRiders = [
         {
@@ -115,8 +145,9 @@ class RiderService {
           'is_verified': true,
           'rating_average': 4.8,
           'total_rides': 156,
-          'current_location': 'POINT(${3.5892 + 0.01} ${36.5644 + 0.005})', // ~1km northeast
+          'current_location': 'POINT(3.5992 36.5694)', // ~1km northeast
           'matricule_moto': 'ALG-001-16',
+          'statut_bloque': false,
         },
         {
           'nom_complet': 'Karim Meziane',
@@ -127,8 +158,9 @@ class RiderService {
           'is_verified': true,
           'rating_average': 4.6,
           'total_rides': 203,
-          'current_location': 'POINT(${3.5892 - 0.015} ${36.5644 - 0.008})', // ~2km southwest
+          'current_location': 'POINT(3.5742 36.5564)', // ~2km southwest
           'matricule_moto': 'ALG-002-16',
+          'statut_bloque': false,
         },
         {
           'nom_complet': 'Yacine Boumediene',
@@ -139,8 +171,9 @@ class RiderService {
           'is_verified': true,
           'rating_average': 4.9,
           'total_rides': 89,
-          'current_location': 'POINT(${3.5892 + 0.02} ${36.5644 - 0.01})', // ~2.5km southeast
+          'current_location': 'POINT(3.6092 36.5544)', // ~2.5km southeast
           'matricule_moto': 'ALG-003-16',
+          'statut_bloque': false,
         },
         {
           'nom_complet': 'Sofiane Khelifi',
@@ -151,8 +184,9 @@ class RiderService {
           'is_verified': true,
           'rating_average': 4.7,
           'total_rides': 312,
-          'current_location': 'POINT(${3.5892 - 0.008} ${36.5644 + 0.012})', // ~1.5km northwest
+          'current_location': 'POINT(3.5812 36.5764)', // ~1.5km northwest
           'matricule_moto': 'ALG-004-16',
+          'statut_bloque': false,
         },
         {
           'nom_complet': 'Nabil Saidi',
@@ -163,8 +197,9 @@ class RiderService {
           'is_verified': true,
           'rating_average': 4.5,
           'total_rides': 178,
-          'current_location': 'POINT(${3.5892 + 0.025} ${36.5644 + 0.015})', // ~3km northeast
+          'current_location': 'POINT(3.6142 36.5794)', // ~3km northeast
           'matricule_moto': 'ALG-005-16',
+          'statut_bloque': false,
         },
         {
           'nom_complet': 'Djamel Brahimi',
@@ -175,20 +210,22 @@ class RiderService {
           'is_verified': true,
           'rating_average': 4.4,
           'total_rides': 245,
-          'current_location': 'POINT(${3.5892 - 0.02} ${36.5644 + 0.008})', // ~2.2km northwest
+          'current_location': 'POINT(3.5692 36.5724)', // ~2.2km northwest
           'matricule_moto': null, // Some riders might not have assigned motorcycles yet
+          'statut_bloque': false,
         },
       ];
 
       for (var rider in testRiders) {
         try {
           await _supabase.from('motards').insert(rider);
+          print('✅ Created rider: ${rider['nom_complet']}');
         } catch (e) {
           print('❌ Failed to create rider ${rider['nom_complet']}: $e');
         }
       }
 
-      print('Test riders created successfully in Lakhdaria area!');
+      print('✅ Test riders created successfully in Lakhdaria area!');
     } catch (e) {
       print('Error creating test riders: $e');
       // If we can't create riders, let's try to fetch existing ones
