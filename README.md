@@ -4,6 +4,29 @@ A Flutter ride-sharing application using Supabase for authentication and backend
 
 ## Setup Instructions
 
+### 0. Testing with Real Supabase Data
+
+The app is configured to work with test data in the **Lakhdaria, Bouira** area. Here's how to test:
+
+#### **Quick Test Steps:**
+1. **Run the app** - Test data will be created automatically
+2. **Allow location permissions** when prompted
+3. **Wait for map to load** - you'll see blue rider markers
+4. **Tap rider markers** to see details
+5. **Use "Book a Ride" button** to test booking flow
+
+#### **Test Data Created:**
+- **6 test riders** in Lakhdaria area (within 10km)
+- **6 test motorcycles** with realistic data
+- **All riders online and verified** for immediate testing
+
+#### **Testing Features:**
+- ✅ **Real-time rider locations** on map
+- ✅ **Distance calculations** from your location
+- ✅ **Rider ratings and details**
+- ✅ **Location selection** for pickup/destination
+- ✅ **Booking flow** with price estimation
+
 ### 0. Google Maps API Setup
 
 1. Go to the [Google Cloud Console](https://console.cloud.google.com/)

@@ -4,6 +4,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'dart:async';
 import '../../services/rider_service.dart';
+import '../../services/test_data_service.dart';
 import '../profile/profile_screen.dart';
 import '../trips/trips_screen.dart';
 import '../promotions/promotions_screen.dart';
@@ -32,6 +33,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<RiderData> _nearbyRiders = [];
   bool _isLoadingRiders = false;
   final RiderService _riderService = RiderService();
+  final TestDataService _testDataService = TestDataService();
   
   // Location selection mode
   bool _isLocationSelectionMode = false;
@@ -45,7 +47,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _getCurrentLocation();
-    _createTestRidersIfNeeded();
+    _initializeTestData();
     
     // Listen for location selection requests
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -53,12 +55,38 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  Future<void> _createTestRidersIfNeeded() async {
-    // Only create test riders once - you can comment this out after first run
+  Future<void> _initializeTestData() async {
     try {
-      await _riderService.createTestRiders();
+      // Check if test data already exists
+      bool dataExists = await _testDataService.testDataExists();
+      
+      if (!dataExists) {
+        print('🚀 Creating test data for Lakhdaria area...');
+        await _testDataService.initializeTestData();
+        
+        // Show success message
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ Test riders created in Lakhdaria area!'),
+              backgroundColor: Color(0xFF32C156),
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+      } else {
+        print('✅ Test data already exists');
+      }
     } catch (e) {
-      print('Test riders might already exist: $e');
+      print('❌ Error initializing test data: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Error creating test data: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
