@@ -19,13 +19,13 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   Completer<GoogleMapController> _controller = Completer();
   
-  // Default location (Algiers, Algeria)
-  static const CameraPosition _kAlgiers = CameraPosition(
-    target: LatLng(36.7538, 3.0588),
+  // Default location (Lakhdaria, Bouira)
+  static const CameraPosition _kLakhdaria = CameraPosition(
+    target: LatLng(36.5644, 3.5892),
     zoom: 14.0,
   );
   
-  LatLng _userLocation = const LatLng(36.7538, 3.0588);
+  LatLng _userLocation = const LatLng(36.5644, 3.5892); // Lakhdaria coordinates
   bool _locationLoaded = false;
   bool _isLoadingLocation = false;
   Set<Marker> _markers = {};
@@ -176,6 +176,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _updateMarkers();
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
   }
+
   void _updateMarkersWithRiders() {
     if (_isLocationSelectionMode) {
       _updateMarkersForSelection();
@@ -395,7 +396,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-  }
 
   Future<void> _getCurrentLocation() async {
     setState(() {
@@ -457,10 +457,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
     } catch (e) {
       print('Error getting location: $e');
-      _showLocationDialog('Failed to get your location. Using default location.');
+      _showLocationDialog('Failed to get your location. Using Lakhdaria as default location.');
       setState(() {
         _isLoadingLocation = false;
+        _locationLoaded = true; // Set to true so we can still load riders
       });
+      // Load riders with default location
+      _loadNearbyRiders();
     }
   }
 
@@ -579,7 +582,7 @@ class _HomeScreenState extends State<HomeScreen> {
           // Google Maps
           GoogleMap(
             mapType: MapType.normal,
-            initialCameraPosition: _kAlgiers,
+            initialCameraPosition: _kLakhdaria,
             onMapCreated: (GoogleMapController controller) {
               _controller.complete(controller);
             },
@@ -614,7 +617,7 @@ class _HomeScreenState extends State<HomeScreen> {
               child: IconButton(
                 icon: Icon(
                   _isLocationSelectionMode ? Icons.close : Icons.more_vert, 
-                  color: Color(0xFF32C156)
+                  color: const Color(0xFF32C156)
                 ),
                 onPressed: _isLocationSelectionMode ? _cancelLocationSelection : _showNavigationMenu,
                 iconSize: 24,
