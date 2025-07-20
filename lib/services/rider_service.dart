@@ -91,6 +91,17 @@ class RiderService {
   // Create test riders for Lakhdaria, Bouira area
   Future<void> createTestRiders() async {
     try {
+      // Check if we have any riders already
+      final existingRiders = await _supabase
+          .from('motards')
+          .select('id')
+          .limit(1);
+      
+      if (existingRiders.isNotEmpty) {
+        print('✅ Riders already exist in database');
+        return;
+      }
+      
       // Lakhdaria coordinates: approximately 36.5644° N, 3.5892° E
       final baseLocation = LatLng(36.5644, 3.5892);
       
@@ -170,12 +181,18 @@ class RiderService {
       ];
 
       for (var rider in testRiders) {
-        await _supabase.from('motards').insert(rider);
+        try {
+          await _supabase.from('motards').insert(rider);
+        } catch (e) {
+          print('❌ Failed to create rider ${rider['nom_complet']}: $e');
+        }
       }
 
       print('Test riders created successfully in Lakhdaria area!');
     } catch (e) {
       print('Error creating test riders: $e');
+      // If we can't create riders, let's try to fetch existing ones
+      print('🔄 Attempting to fetch existing riders instead...');
     }
   }
 

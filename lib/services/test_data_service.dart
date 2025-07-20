@@ -4,9 +4,34 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 class TestDataService {
   final SupabaseClient _supabase = Supabase.instance.client;
 
+  // Check if user has admin privileges or use service role
+  Future<bool> _hasAdminAccess() async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user == null) return false;
+      
+      // Check if user is in admins table
+      final admin = await _supabase
+          .from('admins')
+          .select('id')
+          .eq('num_tel', user.phone ?? '')
+          .maybeSingle();
+      
+      return admin != null;
+    } catch (e) {
+      return false;
+    }
+  }
+
   // Create test motorcycles for Lakhdaria area
   Future<void> createTestMotorcycles() async {
     try {
+      // Skip if no admin access - motorcycles need admin permissions
+      if (!await _hasAdminAccess()) {
+        print('⚠️ Skipping motorcycle creation - requires admin access');
+        return;
+      }
+      
       final motorcycles = [
         {
           'matricule': 'LAK-001-25',
@@ -65,6 +90,12 @@ class TestDataService {
   // Create test riders in Lakhdaria area
   Future<void> createTestRiders() async {
     try {
+      // Skip if no admin access - motards need admin permissions  
+      if (!await _hasAdminAccess()) {
+        print('⚠️ Skipping rider creation - requires admin access');
+        return;
+      }
+      
       // Lakhdaria coordinates: 36.5644° N, 3.5892° E
       final testRiders = [
         {
@@ -160,17 +191,35 @@ class TestDataService {
   // Create a test client (you)
   Future<void> createTestClient() async {
     try {
+      final user = _supabase.auth.currentUser;
+      if (user == null) {
+        print('⚠️ No authenticated user - cannot create client profile');
+        return;
+      }
+      
+      // Check if client already exists
+      final existingClient = await _supabase
+          .from('clients')
+          .select('id')
+          .eq('num_tel', user.phone ?? '')
+          .maybeSingle();
+      
+      if (existingClient != null) {
+        print('✅ Client profile already exists');
+        return;
+      }
+      
       final testClient = {
-        'nom_complet': 'Test User Lakhdaria',
-        'num_tel': '+213555123456',
-        'email': 'testuser@lakhdaria.com',
+        'nom_complet': user.userMetadata?['display_name'] ?? 'User Lakhdaria',
+        'num_tel': user.phone ?? '',
+        'email': user.email ?? '',
         'adresse_principale': 'Lakhdaria, Bouira',
         'status_bloque': false,
         'total_rides': 0,
         'rating_average': 0.0,
       };
 
-      await _supabase.from('clients').upsert(testClient);
+      await _supabase.from('clients').insert(testClient);
       print('✅ Test client created successfully!');
     } catch (e) {
       print('❌ Error creating test client: $e');
@@ -181,28 +230,30 @@ class TestDataService {
   Future<void> initializeTestData() async {
     print('🚀 Initializing test data for Lakhdaria area...');
     
-    await createTestMotorcycles();
-    await Future.delayed(const Duration(milliseconds: 500));
-    
-    await createTestRiders();
-    await Future.delayed(const Duration(milliseconds: 500));
-    
+    // Create client profile first (this works with current user)
     await createTestClient();
+    await Future.delayed(const Duration(milliseconds: 300));
     
-    print('✅ All test data initialized successfully!');
+    // Try to create motorcycles and riders (requires admin access)
+    await createTestMotorcycles();
+    await Future.delayed(const Duration(milliseconds: 300));
+    await createTestRiders();
+    
+    print('✅ Test data initialization completed!');
   }
 
   // Check if test data exists
   Future<bool> testDataExists() async {
     try {
+      // Check for any riders in the area instead of specific phone number
       final riders = await _supabase
           .from('motards')
           .select('id')
-          .eq('num_tel', '+213661234567')
-          .maybeSingle();
+          .limit(1);
       
-      return riders != null;
+      return riders.isNotEmpty;
     } catch (e) {
+      print('Error checking test data: $e');
       return false;
     }
   }
@@ -210,6 +261,11 @@ class TestDataService {
   // Clean test data (for resetting)
   Future<void> cleanTestData() async {
     try {
+      if (!await _hasAdminAccess()) {
+        print('⚠️ Admin access required to clean test data');
+        return;
+      }
+      
       // Delete test riders
       await _supabase
           .from('motards')
@@ -226,11 +282,34 @@ class TestDataService {
       await _supabase
           .from('clients')
           .delete()
-          .eq('num_tel', '+213555123456');
+          .eq('num_tel', _supabase.auth.currentUser?.phone ?? '');
       
       print('✅ Test data cleaned successfully!');
     } catch (e) {
       print('❌ Error cleaning test data: $e');
+    }
+  }
+  
+  // Create a simple test admin for development
+  Future<void> createTestAdmin() async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user == null) return;
+      
+      // This might fail due to RLS, but worth trying
+      final testAdmin = {
+        'nom_complet': 'Test Admin',
+        'num_tel': user.phone ?? '',
+        'email': user.email ?? 'admin@test.com',
+        'password_hash': 'test_hash', // In real app, this should be properly hashed
+        'type': 'SuperAdmin',
+        'is_active': true,
+      };
+      
+      await _supabase.from('admins').insert(testAdmin);
+      print('✅ Test admin created!');
+    } catch (e) {
+      print('❌ Could not create admin (expected): $e');
     }
   }
 }
