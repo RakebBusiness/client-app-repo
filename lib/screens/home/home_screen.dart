@@ -3,6 +3,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'dart:async';
+import '../../services/rider_service.dart';
 import '../profile/profile_screen.dart';
 import '../trips/trips_screen.dart';
 import '../promotions/promotions_screen.dart';
@@ -28,6 +29,9 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _locationLoaded = false;
   bool _isLoadingLocation = false;
   Set<Marker> _markers = {};
+  List<RiderData> _nearbyRiders = [];
+  bool _isLoadingRiders = false;
+  final RiderService _riderService = RiderService();
   
   // Location selection mode
   bool _isLocationSelectionMode = false;
@@ -41,11 +45,49 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _getCurrentLocation();
+    _createTestRidersIfNeeded();
     
     // Listen for location selection requests
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkForLocationSelectionRequest();
     });
+  }
+
+  Future<void> _createTestRidersIfNeeded() async {
+    // Only create test riders once - you can comment this out after first run
+    try {
+      await _riderService.createTestRiders();
+    } catch (e) {
+      print('Test riders might already exist: $e');
+    }
+  }
+
+  Future<void> _loadNearbyRiders() async {
+    if (!_locationLoaded) return;
+    
+    setState(() {
+      _isLoadingRiders = true;
+    });
+
+    try {
+      final riders = await _riderService.getNearbyRiders(
+        userLocation: _userLocation,
+        radiusKm: 10.0,
+      );
+      
+      setState(() {
+        _nearbyRiders = riders;
+        _isLoadingRiders = false;
+      });
+      
+      _updateMarkersWithRiders();
+      
+    } catch (e) {
+      print('Error loading nearby riders: $e');
+      setState(() {
+        _isLoadingRiders = false;
+      });
+    }
   }
 
   void _checkForLocationSelectionRequest() {
@@ -133,6 +175,150 @@ class _HomeScreenState extends State<HomeScreen> {
     });
     _updateMarkers();
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
+  }
+  void _updateMarkersWithRiders() {
+    if (_isLocationSelectionMode) {
+      _updateMarkersForSelection();
+      return;
+    }
+    
+    Set<Marker> markers = {};
+    
+    // Add user location marker
+    markers.add(
+      Marker(
+        markerId: const MarkerId('user_location'),
+        position: _userLocation,
+        infoWindow: const InfoWindow(title: 'Your Location'),
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+      ),
+    );
+    
+    // Add rider markers
+    for (var rider in _nearbyRiders) {
+      markers.add(
+        Marker(
+          markerId: MarkerId('rider_${rider.id}'),
+          position: rider.currentLocation,
+          infoWindow: InfoWindow(
+            title: rider.nomComplet,
+            snippet: '⭐ ${rider.ratingAverage.toStringAsFixed(1)} • ${rider.distanceKm.toStringAsFixed(1)}km away',
+          ),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
+          onTap: () => _showRiderDetails(rider),
+        ),
+      );
+    }
+    
+    setState(() {
+      _markers = markers;
+    });
+  }
+
+  void _showRiderDetails(RiderData rider) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 20),
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Row(
+              children: [
+                Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF32C156).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                  child: const Icon(
+                    Icons.person,
+                    size: 30,
+                    color: Color(0xFF32C156),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        rider.nomComplet,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(Icons.star, color: Colors.orange, size: 16),
+                          const SizedBox(width: 4),
+                          Text(
+                            rider.ratingAverage.toStringAsFixed(1),
+                            style: const TextStyle(fontWeight: FontWeight.w500),
+                          ),
+                          const SizedBox(width: 16),
+                          const Icon(Icons.location_on, color: Colors.grey, size: 16),
+                          const SizedBox(width: 4),
+                          Text('${rider.distanceKm.toStringAsFixed(1)} km away'),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  // Here you could implement booking with specific rider
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Requesting ride from ${rider.nomComplet}...'),
+                      backgroundColor: const Color(0xFF32C156),
+                    ),
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF32C156),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text(
+                  'Request Ride',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _onMapTap(LatLng position) async {
@@ -260,7 +446,10 @@ class _HomeScreenState extends State<HomeScreen> {
         _isLoadingLocation = false;
       });
 
-      _updateMarkers();
+      _updateMarkersWithRiders();
+      
+      // Load nearby riders after getting location
+      _loadNearbyRiders();
 
       // Move map to user location
       final GoogleMapController controller = await _controller.future;
@@ -281,17 +470,9 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
     
-    setState(() {
-      _markers = {
-        Marker(
-          markerId: const MarkerId('user_location'),
-          position: _userLocation,
-          infoWindow: const InfoWindow(title: 'Your Location'),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
-        ),
-      };
-    });
+    _updateMarkersWithRiders();
   }
+  
   void _showLocationDialog(String message) {
     showDialog(
       context: context,
@@ -322,6 +503,8 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_locationLoaded) {
       final GoogleMapController controller = await _controller.future;
       controller.animateCamera(CameraUpdate.newLatLng(_userLocation));
+      // Refresh riders when moving to current location
+      _loadNearbyRiders();
     } else {
       await _getCurrentLocation();
     }
@@ -439,6 +622,42 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
 
+          // Riders count indicator
+          if (!_isLocationSelectionMode && _nearbyRiders.isNotEmpty)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 16,
+              right: 16,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF32C156),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.motorcycle, color: Colors.white, size: 16),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${_nearbyRiders.length}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
           // App title
           Positioned(
             top: MediaQuery.of(context).padding.top + 16,
@@ -526,7 +745,7 @@ class _HomeScreenState extends State<HomeScreen> {
           // My location button
           if (!_isLocationSelectionMode) Positioned(
             right: 16,
-            bottom: 120,
+            bottom: 180,
             child: Container(
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -544,6 +763,39 @@ class _HomeScreenState extends State<HomeScreen> {
                 onPressed: () {
                   _moveToCurrentLocation();
                 },
+                iconSize: 24,
+              ),
+            ),
+          ),
+
+          // Refresh riders button
+          if (!_isLocationSelectionMode) Positioned(
+            right: 16,
+            bottom: 120,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: IconButton(
+                icon: _isLoadingRiders 
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Color(0xFF32C156),
+                        ),
+                      )
+                    : const Icon(Icons.refresh, color: Color(0xFF32C156)),
+                onPressed: _isLoadingRiders ? null : _loadNearbyRiders,
                 iconSize: 24,
               ),
             ),
